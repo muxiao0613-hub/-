@@ -61,6 +61,12 @@ public class ArticleData {
     @Column(name = "product_visit_count")
     private Long productVisitCount;
     
+    @Column(name = "product_want_7d")
+    private Long productWant7d;
+    
+    @Column(name = "product_want_14d")
+    private Long productWant14d;
+    
     @Column(name = "anomaly_status")
     private String anomalyStatus; // NORMAL, GOOD_ANOMALY, BAD_ANOMALY
     
@@ -154,6 +160,12 @@ public class ArticleData {
 
     public Long getProductVisitCount() { return productVisitCount; }
     public void setProductVisitCount(Long productVisitCount) { this.productVisitCount = productVisitCount; }
+
+    public Long getProductWant7d() { return productWant7d; }
+    public void setProductWant7d(Long productWant7d) { this.productWant7d = productWant7d; }
+
+    public Long getProductWant14d() { return productWant14d; }
+    public void setProductWant14d(Long productWant14d) { this.productWant14d = productWant14d; }
 
     public String getAnomalyStatus() { return anomalyStatus; }
     public void setAnomalyStatus(String anomalyStatus) { this.anomalyStatus = anomalyStatus; }

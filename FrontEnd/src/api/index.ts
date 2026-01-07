@@ -80,6 +80,8 @@ export interface ArticleData {
   shareCount14d: number
   productVisit7d?: number
   productVisitCount: number
+  productWant7d?: number
+  productWant14d?: number
   anomalyStatus: string
   anomalyDetails?: string
   anomalyScore?: number

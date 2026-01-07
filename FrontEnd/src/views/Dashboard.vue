@@ -88,7 +88,7 @@
           <el-table-column prop="readCount14d" label="阅读/播放" width="100" />
           <el-table-column prop="interactionCount14d" label="互动" width="80" />
           <el-table-column prop="productVisitCount" label="好物访问" width="90" />
-          <el-table-column prop="shareCount14d" label="好物想要" width="90" />
+          <el-table-column prop="productWant14d" label="好物想要" width="90" />
         </el-table-column>
         
         <el-table-column prop="anomalyStatus" label="状态" width="120" fixed="right">
@@ -156,7 +156,7 @@
             <el-descriptions-item label="阅读/播放量">{{ selectedArticle.readCount14d }}</el-descriptions-item>
             <el-descriptions-item label="互动量">{{ selectedArticle.interactionCount14d }}</el-descriptions-item>
             <el-descriptions-item label="好物访问">{{ selectedArticle.productVisitCount }}</el-descriptions-item>
-            <el-descriptions-item label="好物想要">{{ selectedArticle.shareCount14d }}</el-descriptions-item>
+            <el-descriptions-item label="好物想要">{{ selectedArticle.productWant14d }}</el-descriptions-item>
           </el-descriptions>
         </div>
 

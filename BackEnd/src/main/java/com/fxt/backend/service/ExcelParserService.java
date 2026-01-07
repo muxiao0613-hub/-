@@ -57,21 +57,17 @@ public class ExcelParserService {
                 // 解析数值型数据 - 根据实际列位置
                 article.setReadCount7d(getCellValueAsLong(row.getCell(9)));       // 7天阅读/播放
                 article.setInteractionCount7d(getCellValueAsLong(row.getCell(10))); // 7天互动
-                Long productVisit7d = getCellValueAsLong(row.getCell(11));        // 7天好物访问
-                Long productWant7d = getCellValueAsLong(row.getCell(12));         // 7天好物想要
+                article.setProductVisit7d(getCellValueAsLong(row.getCell(11)));   // 7天好物访问
+                article.setProductWant7d(getCellValueAsLong(row.getCell(12)));    // 7天好物想要
                 
                 article.setReadCount14d(getCellValueAsLong(row.getCell(13)));     // 14天阅读/播放
                 article.setInteractionCount14d(getCellValueAsLong(row.getCell(14))); // 14天互动
-                Long productVisit14d = getCellValueAsLong(row.getCell(15));      // 14天好物访问
-                Long productWant14d = getCellValueAsLong(row.getCell(16));       // 14天好物想要
+                article.setProductVisitCount(getCellValueAsLong(row.getCell(15))); // 14天好物访问
+                article.setProductWant14d(getCellValueAsLong(row.getCell(16)));   // 14天好物想要
                 
-                // 设置产品访问量
-                article.setProductVisit7d(productVisit7d);
-                article.setProductVisitCount(productVisit14d);
-                
-                // 计算分享量（使用好物想要作为分享指标）
-                article.setShareCount7d(productWant7d);
-                article.setShareCount14d(productWant14d);
+                // 设置分享量（使用好物想要作为分享指标）
+                article.setShareCount7d(article.getProductWant7d());
+                article.setShareCount14d(article.getProductWant14d());
                 
                 // 初始状态设为正常
                 article.setAnomalyStatus("NORMAL");
