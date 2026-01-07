@@ -63,13 +63,35 @@
         </div>
       </template>
 
-      <el-table :data="articles" v-loading="loading" style="width: 100%">
-        <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
+      <el-table :data="articles" v-loading="loading" style="width: 100%" :scroll="{ x: 1500 }">
+        <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip fixed="left" />
         <el-table-column prop="brand" label="品牌" width="120" />
-        <el-table-column prop="readCount7d" label="7天阅读" width="100" />
-        <el-table-column prop="interactionCount7d" label="7天互动" width="100" />
-        <el-table-column prop="shareCount7d" label="7天分享" width="100" />
-        <el-table-column prop="anomalyStatus" label="状态" width="120">
+        <el-table-column prop="contentType" label="内容形式" width="100" />
+        <el-table-column prop="postType" label="发文类型" width="120" />
+        <el-table-column prop="materialSource" label="素材来源" width="120" />
+        <el-table-column prop="styleInfo" label="款式信息" width="150" />
+        
+        <!-- 7天数据组 -->
+        <el-table-column label="7天数据" align="center">
+          <el-table-column prop="readCount7d" label="阅读/播放" width="100" />
+          <el-table-column prop="interactionCount7d" label="互动" width="80" />
+          <el-table-column label="好物访问" width="90">
+            <template #default="{ row }">
+              {{ getProductVisit7d(row) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="shareCount7d" label="好物想要" width="90" />
+        </el-table-column>
+        
+        <!-- 14天数据组 -->
+        <el-table-column label="14天数据" align="center">
+          <el-table-column prop="readCount14d" label="阅读/播放" width="100" />
+          <el-table-column prop="interactionCount14d" label="互动" width="80" />
+          <el-table-column prop="productVisitCount" label="好物访问" width="90" />
+          <el-table-column prop="shareCount14d" label="好物想要" width="90" />
+        </el-table-column>
+        
+        <el-table-column prop="anomalyStatus" label="状态" width="120" fixed="right">
           <template #default="{ row }">
             <el-tag 
               :type="getStatusType(row.anomalyStatus)"
@@ -79,7 +101,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="120">
+        <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
             <el-button 
               type="primary" 
@@ -101,18 +123,42 @@
       top="5vh"
     >
       <div v-if="selectedArticle" class="article-detail">
-        <el-descriptions :column="2" border>
+        <el-descriptions :column="3" border>
           <el-descriptions-item label="文章ID">{{ selectedArticle.dataId }}</el-descriptions-item>
           <el-descriptions-item label="品牌">{{ selectedArticle.brand }}</el-descriptions-item>
           <el-descriptions-item label="发布时间">{{ formatDate(selectedArticle.publishTime) }}</el-descriptions-item>
-          <el-descriptions-item label="内容类型">{{ selectedArticle.contentType }}</el-descriptions-item>
-          <el-descriptions-item label="7天阅读量">{{ selectedArticle.readCount7d }}</el-descriptions-item>
-          <el-descriptions-item label="14天阅读量">{{ selectedArticle.readCount14d }}</el-descriptions-item>
-          <el-descriptions-item label="7天互动量">{{ selectedArticle.interactionCount7d }}</el-descriptions-item>
-          <el-descriptions-item label="14天互动量">{{ selectedArticle.interactionCount14d }}</el-descriptions-item>
-          <el-descriptions-item label="7天分享量">{{ selectedArticle.shareCount7d }}</el-descriptions-item>
-          <el-descriptions-item label="14天分享量">{{ selectedArticle.shareCount14d }}</el-descriptions-item>
+          <el-descriptions-item label="内容形式">{{ selectedArticle.contentType }}</el-descriptions-item>
+          <el-descriptions-item label="发文类型">{{ selectedArticle.postType }}</el-descriptions-item>
+          <el-descriptions-item label="素材来源">{{ selectedArticle.materialSource }}</el-descriptions-item>
+          <el-descriptions-item label="款式信息">{{ selectedArticle.styleInfo }}</el-descriptions-item>
+          <el-descriptions-item label="异常状态" :span="2">
+            <el-tag :type="getStatusType(selectedArticle.anomalyStatus)">
+              {{ getStatusText(selectedArticle.anomalyStatus) }}
+            </el-tag>
+          </el-descriptions-item>
         </el-descriptions>
+
+        <!-- 7天数据 -->
+        <div class="data-section">
+          <h3>7天数据表现</h3>
+          <el-descriptions :column="4" border>
+            <el-descriptions-item label="阅读/播放量">{{ selectedArticle.readCount7d }}</el-descriptions-item>
+            <el-descriptions-item label="互动量">{{ selectedArticle.interactionCount7d }}</el-descriptions-item>
+            <el-descriptions-item label="好物访问">{{ getProductVisit7d(selectedArticle) }}</el-descriptions-item>
+            <el-descriptions-item label="好物想要">{{ selectedArticle.shareCount7d }}</el-descriptions-item>
+          </el-descriptions>
+        </div>
+
+        <!-- 14天数据 -->
+        <div class="data-section">
+          <h3>14天数据表现</h3>
+          <el-descriptions :column="4" border>
+            <el-descriptions-item label="阅读/播放量">{{ selectedArticle.readCount14d }}</el-descriptions-item>
+            <el-descriptions-item label="互动量">{{ selectedArticle.interactionCount14d }}</el-descriptions-item>
+            <el-descriptions-item label="好物访问">{{ selectedArticle.productVisitCount }}</el-descriptions-item>
+            <el-descriptions-item label="好物想要">{{ selectedArticle.shareCount14d }}</el-descriptions-item>
+          </el-descriptions>
+        </div>
 
         <div class="content-section" v-if="selectedArticle.content">
           <h3>文章内容</h3>
@@ -122,6 +168,26 @@
         <div class="suggestions-section" v-if="selectedArticle.optimizationSuggestions">
           <h3>优化建议</h3>
           <div class="suggestions-text" v-html="formatSuggestions(selectedArticle.optimizationSuggestions)"></div>
+        </div>
+
+        <div class="content-analysis-section" v-if="selectedArticle.content">
+          <h3>内容特征分析</h3>
+          <div class="content-features">
+            <div class="feature-item" v-if="hasImages(selectedArticle.content)">
+              <span class="feature-icon">📷</span>
+              <span class="feature-text">包含图片内容</span>
+              <span class="feature-count">{{ getImageCount(selectedArticle.content) }}</span>
+            </div>
+            <div class="feature-item" v-if="hasVideos(selectedArticle.content)">
+              <span class="feature-icon">🎥</span>
+              <span class="feature-text">包含视频内容</span>
+            </div>
+            <div class="feature-item">
+              <span class="feature-icon">📝</span>
+              <span class="feature-text">内容长度</span>
+              <span class="feature-count">{{ selectedArticle.content.length }} 字符</span>
+            </div>
+          </div>
         </div>
 
         <div class="link-section" v-if="selectedArticle.articleLink">
@@ -292,7 +358,32 @@ const formatDate = (dateStr: string) => {
 
 const formatSuggestions = (suggestions: string) => {
   if (!suggestions) return ''
-  return suggestions.replace(/\n/g, '<br>')
+  return suggestions
+    .replace(/\n/g, '<br>')
+    .replace(/⚠️/g, '<span class="warning-icon">⚠️</span>')
+    .replace(/✅/g, '<span class="success-icon">✅</span>')
+    .replace(/📷/g, '<span class="image-icon">📷</span>')
+    .replace(/🎥/g, '<span class="video-icon">🎥</span>')
+    .replace(/📸/g, '<span class="camera-icon">📸</span>')
+}
+
+const hasImages = (content: string) => {
+  return content && (content.includes('📷 图片内容分析') || content.includes('图片'))
+}
+
+const hasVideos = (content: string) => {
+  return content && (content.includes('🎥 视频内容') || content.includes('视频'))
+}
+
+const getImageCount = (content: string) => {
+  if (!content) return ''
+  const match = content.match(/共发现 (\d+) 张/)
+  return match ? `${match[1]}张图片` : '包含图片'
+}
+
+const getProductVisit7d = (article: ArticleData) => {
+  // 现在使用正确的7天好物访问字段
+  return article.productVisit7d || 0
 }
 
 const clearAllData = async () => {
@@ -373,13 +464,15 @@ const clearAllData = async () => {
 
 .content-section,
 .suggestions-section,
-.link-section {
+.link-section,
+.data-section {
   margin-top: 20px;
 }
 
 .content-section h3,
 .suggestions-section h3,
-.link-section h3 {
+.link-section h3,
+.data-section h3 {
   color: #409EFF;
   margin-bottom: 10px;
 }
@@ -391,6 +484,70 @@ const clearAllData = async () => {
   border-radius: 4px;
   line-height: 1.6;
   white-space: pre-wrap;
+}
+
+.suggestions-text :deep(.warning-icon) {
+  color: #f59e0b;
+}
+
+.suggestions-text :deep(.success-icon) {
+  color: #10b981;
+}
+
+.suggestions-text :deep(.image-icon) {
+  color: #8b5cf6;
+}
+
+.suggestions-text :deep(.video-icon) {
+  color: #ef4444;
+}
+
+.suggestions-text :deep(.camera-icon) {
+  color: #06b6d4;
+}
+
+.content-analysis-section {
+  margin-top: 20px;
+}
+
+.content-analysis-section h3 {
+  color: #409EFF;
+  margin-bottom: 10px;
+}
+
+.content-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f0f9ff;
+  padding: 8px 12px;
+  border-radius: 20px;
+  font-size: 14px;
+  border: 1px solid #e0f2fe;
+}
+
+.feature-icon {
+  font-size: 16px;
+}
+
+.feature-text {
+  color: #0369a1;
+  font-weight: 500;
+}
+
+.feature-count {
+  background: #0284c7;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .suggestions-text {

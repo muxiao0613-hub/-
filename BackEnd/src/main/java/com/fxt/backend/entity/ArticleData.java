@@ -31,6 +31,12 @@ public class ArticleData {
     @Column(name = "post_type")
     private String postType;
     
+    @Column(name = "material_source")
+    private String materialSource;
+    
+    @Column(name = "style_info")
+    private String styleInfo;
+    
     @Column(name = "read_count_7d")
     private Long readCount7d;
     
@@ -49,14 +55,35 @@ public class ArticleData {
     @Column(name = "share_count_14d")
     private Long shareCount14d;
     
+    @Column(name = "product_visit_7d")
+    private Long productVisit7d;
+    
     @Column(name = "product_visit_count")
     private Long productVisitCount;
     
     @Column(name = "anomaly_status")
     private String anomalyStatus; // NORMAL, GOOD_ANOMALY, BAD_ANOMALY
     
+    @Column(name = "anomaly_details", columnDefinition = "TEXT")
+    private String anomalyDetails; // JSON格式的详细异常分析
+    
+    @Column(name = "anomaly_score")
+    private Double anomalyScore; // 综合异常评分 (0-100)
+    
     @Column(name = "content", columnDefinition = "TEXT")
     private String content;
+    
+    @Column(name = "title_analysis", columnDefinition = "TEXT")
+    private String titleAnalysis; // 标题分析JSON
+    
+    @Column(name = "content_analysis", columnDefinition = "TEXT")
+    private String contentAnalysis; // 内容分析JSON
+    
+    @Column(name = "crawl_status")
+    private String crawlStatus; // 抓取状态: SUCCESS/FAILED/PENDING
+    
+    @Column(name = "crawl_error")
+    private String crawlError; // 抓取失败原因
     
     @Column(name = "optimization_suggestions", columnDefinition = "TEXT")
     private String optimizationSuggestions;
@@ -98,6 +125,12 @@ public class ArticleData {
     public String getPostType() { return postType; }
     public void setPostType(String postType) { this.postType = postType; }
 
+    public String getMaterialSource() { return materialSource; }
+    public void setMaterialSource(String materialSource) { this.materialSource = materialSource; }
+
+    public String getStyleInfo() { return styleInfo; }
+    public void setStyleInfo(String styleInfo) { this.styleInfo = styleInfo; }
+
     public Long getReadCount7d() { return readCount7d; }
     public void setReadCount7d(Long readCount7d) { this.readCount7d = readCount7d; }
 
@@ -116,14 +149,35 @@ public class ArticleData {
     public Long getShareCount14d() { return shareCount14d; }
     public void setShareCount14d(Long shareCount14d) { this.shareCount14d = shareCount14d; }
 
+    public Long getProductVisit7d() { return productVisit7d; }
+    public void setProductVisit7d(Long productVisit7d) { this.productVisit7d = productVisit7d; }
+
     public Long getProductVisitCount() { return productVisitCount; }
     public void setProductVisitCount(Long productVisitCount) { this.productVisitCount = productVisitCount; }
 
     public String getAnomalyStatus() { return anomalyStatus; }
     public void setAnomalyStatus(String anomalyStatus) { this.anomalyStatus = anomalyStatus; }
 
+    public String getAnomalyDetails() { return anomalyDetails; }
+    public void setAnomalyDetails(String anomalyDetails) { this.anomalyDetails = anomalyDetails; }
+
+    public Double getAnomalyScore() { return anomalyScore; }
+    public void setAnomalyScore(Double anomalyScore) { this.anomalyScore = anomalyScore; }
+
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
+
+    public String getTitleAnalysis() { return titleAnalysis; }
+    public void setTitleAnalysis(String titleAnalysis) { this.titleAnalysis = titleAnalysis; }
+
+    public String getContentAnalysis() { return contentAnalysis; }
+    public void setContentAnalysis(String contentAnalysis) { this.contentAnalysis = contentAnalysis; }
+
+    public String getCrawlStatus() { return crawlStatus; }
+    public void setCrawlStatus(String crawlStatus) { this.crawlStatus = crawlStatus; }
+
+    public String getCrawlError() { return crawlError; }
+    public void setCrawlError(String crawlError) { this.crawlError = crawlError; }
 
     public String getOptimizationSuggestions() { return optimizationSuggestions; }
     public void setOptimizationSuggestions(String optimizationSuggestions) { this.optimizationSuggestions = optimizationSuggestions; }

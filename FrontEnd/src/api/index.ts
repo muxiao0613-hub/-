@@ -26,6 +26,41 @@ api.interceptors.response.use(
   }
 )
 
+export interface AnomalyAnalysisResult {
+  metric: string
+  value: number
+  mean: number
+  stdDev: number
+  zScore: number
+  percentile: number
+  deviation: string
+  level: 'SEVERE' | 'MODERATE' | 'MILD' | 'NORMAL'
+}
+
+export interface AnomalyAnalysisReport {
+  results: AnomalyAnalysisResult[]
+  overallStatus: string
+  overallScore: number
+}
+
+export interface TitleAnalysis {
+  length: number
+  hasEmotionalWords: boolean
+  hasSpecificNumber: boolean
+  hasQuestion: boolean
+  hasCallToAction: boolean
+  keywordCount: number
+  qualityScore: number
+}
+
+export interface ArticleDetailResponse {
+  article: ArticleData
+  anomalyReport: AnomalyAnalysisReport
+  titleAnalysis: TitleAnalysis
+  benchmarkArticles: ArticleData[]
+  brandAverages: Record<string, number>
+}
+
 export interface ArticleData {
   id?: number
   dataId: string
@@ -35,15 +70,24 @@ export interface ArticleData {
   articleLink: string
   contentType: string
   postType: string
+  materialSource?: string
+  styleInfo?: string
   readCount7d: number
   readCount14d: number
   interactionCount7d: number
   interactionCount14d: number
   shareCount7d: number
   shareCount14d: number
+  productVisit7d?: number
   productVisitCount: number
   anomalyStatus: string
+  anomalyDetails?: string
+  anomalyScore?: number
   content?: string
+  titleAnalysis?: string
+  contentAnalysis?: string
+  crawlStatus?: string
+  crawlError?: string
   optimizationSuggestions?: string
   createdAt?: string
   updatedAt?: string
@@ -84,6 +128,11 @@ export const analysisApi = {
   // 根据状态获取文章
   getArticlesByStatus: (status: string): Promise<ArticleData[]> => {
     return api.get(`/analysis/articles/status/${status}`)
+  },
+
+  // 获取文章详情（含分析报告）
+  getArticleDetail: (id: number): Promise<ArticleDetailResponse> => {
+    return api.get(`/analysis/articles/${id}/detail`)
   },
 
   // 获取单个文章

@@ -1,7 +1,7 @@
 package com.fxt.backend.service;
 
 import com.fxt.backend.entity.ArticleData;
-import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
+import com.fxt.backend.dto.*;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -10,157 +10,110 @@ import java.util.stream.Collectors;
 @Service
 public class AnomalyDetectionService {
     
-    private static final double Z_SCORE_THRESHOLD = 2.0;
-    private static final double IQR_MULTIPLIER = 1.5;
-    
     public void detectAnomalies(List<ArticleData> articles) {
-        // 对每个指标进行异常检测
-        detectReadCountAnomalies(articles);
-        detectInteractionCountAnomalies(articles);
-        detectShareCountAnomalies(articles);
+        // 1. 计算所有指标的统计数据
+        StatisticsContext context = calculateStatistics(articles);
         
-        // 综合判断异常状态
+        // 2. 为每篇文章生成详细的异常分析
         for (ArticleData article : articles) {
-            determineOverallAnomalyStatus(article);
+            AnomalyAnalysisReport report = analyzeArticle(article, context);
+            
+            // 3. 设置异常状态和详细分析
+            article.setAnomalyStatus(report.getOverallStatus());
+            article.setAnomalyDetails(report.toJson());
+            article.setAnomalyScore(report.getOverallScore());
         }
     }
     
-    private void detectReadCountAnomalies(List<ArticleData> articles) {
+    private StatisticsContext calculateStatistics(List<ArticleData> articles) {
+        // 提取各指标的有效数据
         List<Double> readCounts = articles.stream()
             .filter(a -> a.getReadCount7d() != null && a.getReadCount7d() > 0)
             .map(a -> a.getReadCount7d().doubleValue())
             .collect(Collectors.toList());
             
-        if (readCounts.isEmpty()) return;
-        
-        DescriptiveStatistics stats = new DescriptiveStatistics();
-        readCounts.forEach(stats::addValue);
-        
-        double mean = stats.getMean();
-        double stdDev = stats.getStandardDeviation();
-        double q1 = stats.getPercentile(25);
-        double q3 = stats.getPercentile(75);
-        double iqr = q3 - q1;
-        
-        for (ArticleData article : articles) {
-            if (article.getReadCount7d() == null || article.getReadCount7d() == 0) continue;
-            
-            double value = article.getReadCount7d().doubleValue();
-            double zScore = Math.abs((value - mean) / stdDev);
-            
-            // Z-Score检测
-            if (zScore > Z_SCORE_THRESHOLD) {
-                if (value > mean) {
-                    article.setAnomalyStatus("GOOD_ANOMALY");
-                } else {
-                    article.setAnomalyStatus("BAD_ANOMALY");
-                }
-            }
-            
-            // IQR检测
-            if (value > q3 + IQR_MULTIPLIER * iqr) {
-                article.setAnomalyStatus("GOOD_ANOMALY");
-            } else if (value < q1 - IQR_MULTIPLIER * iqr) {
-                article.setAnomalyStatus("BAD_ANOMALY");
-            }
-        }
-    }
-    
-    private void detectInteractionCountAnomalies(List<ArticleData> articles) {
         List<Double> interactionCounts = articles.stream()
             .filter(a -> a.getInteractionCount7d() != null && a.getInteractionCount7d() > 0)
             .map(a -> a.getInteractionCount7d().doubleValue())
             .collect(Collectors.toList());
             
-        if (interactionCounts.isEmpty()) return;
-        
-        DescriptiveStatistics stats = new DescriptiveStatistics();
-        interactionCounts.forEach(stats::addValue);
-        
-        double mean = stats.getMean();
-        double stdDev = stats.getStandardDeviation();
-        
-        for (ArticleData article : articles) {
-            if (article.getInteractionCount7d() == null || article.getInteractionCount7d() == 0) continue;
-            
-            double value = article.getInteractionCount7d().doubleValue();
-            double zScore = Math.abs((value - mean) / stdDev);
-            
-            if (zScore > Z_SCORE_THRESHOLD) {
-                if (value > mean && !"BAD_ANOMALY".equals(article.getAnomalyStatus())) {
-                    article.setAnomalyStatus("GOOD_ANOMALY");
-                } else if (value < mean) {
-                    article.setAnomalyStatus("BAD_ANOMALY");
-                }
-            }
-        }
-    }
-    
-    private void detectShareCountAnomalies(List<ArticleData> articles) {
         List<Double> shareCounts = articles.stream()
             .filter(a -> a.getShareCount7d() != null && a.getShareCount7d() > 0)
             .map(a -> a.getShareCount7d().doubleValue())
             .collect(Collectors.toList());
             
-        if (shareCounts.isEmpty()) return;
+        List<Double> productVisits = articles.stream()
+            .filter(a -> a.getProductVisitCount() != null && a.getProductVisitCount() > 0)
+            .map(a -> a.getProductVisitCount().doubleValue())
+            .collect(Collectors.toList());
         
-        DescriptiveStatistics stats = new DescriptiveStatistics();
-        shareCounts.forEach(stats::addValue);
-        
-        double mean = stats.getMean();
-        double stdDev = stats.getStandardDeviation();
-        
-        for (ArticleData article : articles) {
-            if (article.getShareCount7d() == null || article.getShareCount7d() == 0) continue;
-            
-            double value = article.getShareCount7d().doubleValue();
-            double zScore = Math.abs((value - mean) / stdDev);
-            
-            if (zScore > Z_SCORE_THRESHOLD) {
-                if (value > mean && !"BAD_ANOMALY".equals(article.getAnomalyStatus())) {
-                    article.setAnomalyStatus("GOOD_ANOMALY");
-                } else if (value < mean) {
-                    article.setAnomalyStatus("BAD_ANOMALY");
-                }
-            }
-        }
+        return new StatisticsContext(
+            new MetricStatistics(readCounts),
+            new MetricStatistics(interactionCounts),
+            new MetricStatistics(shareCounts),
+            new MetricStatistics(productVisits)
+        );
     }
     
-    private void determineOverallAnomalyStatus(ArticleData article) {
-        // 如果还没有被标记为异常，保持正常状态
-        if (article.getAnomalyStatus() == null) {
-            article.setAnomalyStatus("NORMAL");
-        }
+    private AnomalyAnalysisReport analyzeArticle(ArticleData article, StatisticsContext context) {
+        AnomalyAnalysisReport report = new AnomalyAnalysisReport();
         
-        // 计算综合得分来进一步确认异常状态
-        double totalScore = 0;
-        int validMetrics = 0;
-        
+        // 分析阅读量
         if (article.getReadCount7d() != null && article.getReadCount7d() > 0) {
-            totalScore += article.getReadCount7d();
-            validMetrics++;
+            AnomalyAnalysisResult readResult = analyzeMetric(
+                "7天阅读量",
+                article.getReadCount7d().doubleValue(),
+                context.getReadCountStats()
+            );
+            report.addResult(readResult);
         }
         
+        // 分析互动量
         if (article.getInteractionCount7d() != null && article.getInteractionCount7d() > 0) {
-            totalScore += article.getInteractionCount7d() * 10; // 互动权重更高
-            validMetrics++;
+            AnomalyAnalysisResult interactionResult = analyzeMetric(
+                "7天互动量",
+                article.getInteractionCount7d().doubleValue(),
+                context.getInteractionCountStats()
+            );
+            report.addResult(interactionResult);
         }
         
+        // 分析分享量
         if (article.getShareCount7d() != null && article.getShareCount7d() > 0) {
-            totalScore += article.getShareCount7d() * 20; // 分享权重最高
-            validMetrics++;
+            AnomalyAnalysisResult shareResult = analyzeMetric(
+                "7天分享量",
+                article.getShareCount7d().doubleValue(),
+                context.getShareCountStats()
+            );
+            report.addResult(shareResult);
         }
         
-        // 基于综合得分的阈值判断
-        if (validMetrics > 0) {
-            double avgScore = totalScore / validMetrics;
-            if (avgScore > 10000) { // 高阈值
-                if (!"BAD_ANOMALY".equals(article.getAnomalyStatus())) {
-                    article.setAnomalyStatus("GOOD_ANOMALY");
-                }
-            } else if (avgScore < 100) { // 低阈值
-                article.setAnomalyStatus("BAD_ANOMALY");
-            }
+        // 分析好物访问量
+        if (article.getProductVisitCount() != null && article.getProductVisitCount() > 0) {
+            AnomalyAnalysisResult productResult = analyzeMetric(
+                "好物访问量",
+                article.getProductVisitCount().doubleValue(),
+                context.getProductVisitStats()
+            );
+            report.addResult(productResult);
         }
+        
+        // 综合评估
+        report.calculateOverallStatus();
+        
+        return report;
+    }
+    
+    private AnomalyAnalysisResult analyzeMetric(String metricName, double value, MetricStatistics stats) {
+        AnomalyAnalysisResult result = new AnomalyAnalysisResult();
+        result.setMetric(metricName);
+        result.setValue(value);
+        result.setMean(stats.getMean());
+        result.setStdDev(stats.getStdDev());
+        
+        // 计算百分位
+        result.setPercentile(stats.calculatePercentile(value));
+        
+        return result;
     }
 }

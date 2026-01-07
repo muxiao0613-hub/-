@@ -2,6 +2,8 @@ package com.fxt.backend.controller;
 
 import com.fxt.backend.entity.ArticleData;
 import com.fxt.backend.service.AnalysisService;
+import com.fxt.backend.dto.ArticleDetailResponse;
+import com.fxt.backend.service.ContentCrawlerService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -61,6 +63,17 @@ public class AnalysisController {
         return ResponseEntity.ok(articles);
     }
     
+    @GetMapping("/articles/{id}/detail")
+    public ResponseEntity<ArticleDetailResponse> getArticleDetail(@PathVariable Long id) {
+        ArticleData article = analysisService.getArticleById(id);
+        if (article != null) {
+            ArticleDetailResponse response = analysisService.getArticleDetailResponse(article);
+            return ResponseEntity.ok(response);
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
+    
     @GetMapping("/articles/{id}")
     public ResponseEntity<ArticleData> getArticleById(@PathVariable Long id) {
         ArticleData article = analysisService.getArticleById(id);
@@ -108,6 +121,29 @@ public class AnalysisController {
         statistics.put("avgInteractionCount", avgInteractionCount);
         
         return ResponseEntity.ok(statistics);
+    }
+    
+    @GetMapping("/test-crawl")
+    public ResponseEntity<Map<String, Object>> testCrawl(@RequestParam String url) {
+        Map<String, Object> response = new HashMap<>();
+        
+        try {
+            // 测试内容抓取
+            ContentCrawlerService crawler = new ContentCrawlerService();
+            String content = crawler.crawlContent(url).get();
+            
+            response.put("success", true);
+            response.put("url", url);
+            response.put("contentLength", content.length());
+            response.put("content", content.length() > 500 ? content.substring(0, 500) + "..." : content);
+            
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("error", e.getMessage());
+            response.put("url", url);
+        }
+        
+        return ResponseEntity.ok(response);
     }
     
     @DeleteMapping("/articles")
