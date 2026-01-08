@@ -92,9 +92,7 @@ export interface ArticleData {
   crawlError?: string
   optimizationSuggestions?: string
   aiSuggestions?: string
-  imagesInfo?: string
-  imagesDownloaded?: boolean
-  localImagesPath?: string
+  imagesInfo?: string  // JSON格式的图片URL列表
   createdAt?: string
   updatedAt?: string
 }

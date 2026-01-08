@@ -3,11 +3,6 @@
     <div class="top-nav">
       <el-button @click="goBack" :icon="ArrowLeft" circle />
       <h2 class="page-title">{{ article?.title || '文章详情' }}</h2>
-      <div class="nav-actions">
-        <el-button type="primary" @click="recrawlContent" :loading="recrawling">
-          开始爬取
-        </el-button>
-      </div>
     </div>
 
     <div class="detail-layout" v-loading="loading">
@@ -30,9 +25,9 @@
         <el-card class="content-card">
           <template #header>
             <div class="card-header">
-              <span>📷 抓取的图文内容</span>
-              <el-tag :type="article?.crawlStatus === 'SUCCESS' ? 'success' : 'warning'" size="small">
-                {{ article?.crawlStatus === 'SUCCESS' ? '爬取成功' : '待爬取' }}
+              <span>📷 图文内容</span>
+              <el-tag :type="article?.crawlStatus === 'SUCCESS' ? 'success' : 'info'" size="small">
+                {{ getCrawlStatusText(article?.crawlStatus) }}
               </el-tag>
             </div>
           </template>
@@ -40,29 +35,29 @@
           <div v-if="parsedImages.length > 0" class="images-grid">
             <div v-for="(img, idx) in parsedImages" :key="idx" class="image-item">
               <img
-                v-if="img.localPath && img.downloaded"
-                :src="getImageUrl(img.localPath)"
-                :alt="img.description"
+                v-if="img.url"
+                :src="img.url"
+                :alt="img.description || img.alt || '内容图片'"
                 @error="handleImageError"
               />
               <div v-else class="image-placeholder">
                 <el-icon><Picture /></el-icon>
-                <span>{{ img.downloaded === false ? '下载失败' : '加载中' }}</span>
+                <span>图片链接无效</span>
               </div>
               <div class="image-info">
                 <span class="image-type">{{ img.type || '内容图' }}</span>
-                <span class="image-size" v-if="img.fileSize">{{ formatFileSize(img.fileSize) }}</span>
+                <span class="image-dimensions" v-if="img.width && img.height">{{ img.width }}×{{ img.height }}</span>
               </div>
             </div>
           </div>
-          <el-empty v-else description="暂无图片内容，点击上方「开始爬取」按钮获取" :image-size="80" />
+          <el-empty v-else description="正在自动获取图片内容..." :image-size="80" />
 
           <div class="text-content" v-if="article?.content">
             <h4>📝 文字内容</h4>
             <div class="content-text">{{ article.content }}</div>
           </div>
           <div class="text-content" v-else>
-            <el-empty description="暂无文字内容，点击上方「开始爬取」按钮获取" :image-size="60" />
+            <el-empty description="正在自动获取文字内容..." :image-size="60" />
           </div>
         </el-card>
 
@@ -184,13 +179,23 @@
 
         <el-card class="optimization-card">
           <template #header>
-            <span>💡 基础优化建议</span>
+            <div class="card-header">
+              <span>💡 基础优化建议</span>
+              <el-tag v-if="article?.optimizationSuggestions" type="success" size="small">
+                已生成
+              </el-tag>
+              <el-tag v-else type="info" size="small">
+                自动生成中
+              </el-tag>
+            </div>
           </template>
 
           <div v-if="article?.optimizationSuggestions" class="optimization-content">
             <pre class="optimization-text">{{ article.optimizationSuggestions }}</pre>
           </div>
-          <el-empty v-else description="暂无优化建议" :image-size="60" />
+          <div v-else class="optimization-empty">
+            <el-empty description="正在自动生成基础优化建议..." :image-size="60" />
+          </div>
         </el-card>
       </div>
     </div>
@@ -208,7 +213,6 @@ const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
-const recrawling = ref(false)
 const generatingAI = ref(false)
 const exporting = ref(false)
 const article = ref<ArticleData | null>(null)
@@ -217,7 +221,16 @@ const aiAvailable = ref(false)
 const parsedImages = computed(() => {
   if (!article.value?.imagesInfo) return []
   try {
-    return JSON.parse(article.value.imagesInfo)
+    const imageUrls = JSON.parse(article.value.imagesInfo)
+    // 如果是字符串数组，转换为对象数组
+    if (Array.isArray(imageUrls) && imageUrls.length > 0 && typeof imageUrls[0] === 'string') {
+      return imageUrls.map((url: string, index: number) => ({
+        url: url,
+        description: `图片${index + 1}`,
+        type: '内容图'
+      }))
+    }
+    return imageUrls
   } catch {
     return []
   }
@@ -249,6 +262,25 @@ const loadArticle = async (id: number) => {
   loading.value = true
   try {
     article.value = await analysisApi.getArticleById(id)
+    
+    // 如果内容正在处理中，设置自动刷新
+    if (article.value && (
+      !article.value.content || 
+      article.value.crawlStatus === 'PENDING' ||
+      !article.value.optimizationSuggestions
+    )) {
+      // 3秒后自动刷新一次，查看处理结果
+      setTimeout(async () => {
+        try {
+          const updatedArticle = await analysisApi.getArticleById(id)
+          if (updatedArticle) {
+            article.value = updatedArticle
+          }
+        } catch (error) {
+          console.log('自动刷新失败:', error)
+        }
+      }, 3000)
+    }
   } catch (error) {
     ElMessage.error('加载文章详情失败')
   } finally {
@@ -332,40 +364,18 @@ const exportAI = async () => {
   }
 }
 
-const recrawlContent = async () => {
-  if (!article.value?.id) return
-  recrawling.value = true
-  try {
-    const response = await fetch(`/api/enhanced/articles/${article.value.id}/recrawl`, {
-      method: 'POST'
-    })
-    const data = await response.json()
-    if (data.success) {
-      ElMessage.success(`爬取成功！${data.message}`)
-      await loadArticle(article.value.id)
-    } else {
-      ElMessage.error(data.error || '爬取失败')
-    }
-  } catch (error) {
-    ElMessage.error('重新爬取失败')
-  } finally {
-    recrawling.value = false
-  }
-}
-
 const goBack = () => {
   router.back()
 }
 
-const getImageUrl = (localPath: string) => {
-  let imagePath = localPath
-  if (imagePath.startsWith('downloads/images/')) {
-    imagePath = imagePath.replace('downloads/images/', '')
+const getCrawlStatusText = (status: string | undefined) => {
+  switch (status) {
+    case 'SUCCESS': return '已获取'
+    case 'PENDING': return '获取中'
+    case 'PARTIAL': return '部分获取'
+    case 'FAILED': return '获取失败'
+    default: return '自动获取中'
   }
-  if (imagePath.startsWith('downloads\\images\\')) {
-    imagePath = imagePath.replace('downloads\\images\\', '').replace(/\\/g, '/')
-  }
-  return `/api/images/${imagePath}`
 }
 
 const handleImageError = (e: Event) => {
@@ -380,12 +390,6 @@ const formatNumber = (num: number | null | undefined) => {
 const formatDate = (dateStr: string | undefined) => {
   if (!dateStr) return ''
   return new Date(dateStr).toLocaleString('zh-CN')
-}
-
-const formatFileSize = (size: number) => {
-  if (size < 1024) return size + ' B'
-  if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB'
-  return (size / 1024 / 1024).toFixed(1) + ' MB'
 }
 
 const getInteractionRateClass = () => {

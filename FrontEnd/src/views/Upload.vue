@@ -142,7 +142,14 @@ const uploadFile = async () => {
   try {
     const result = await analysisApi.uploadExcel(selectedFile.value)
     uploadResult.value = result
-    ElMessage.success('文件上传和分析成功!')
+    
+    // 显示成功消息和后台处理提示
+    ElMessage.success('文件上传成功！')
+    ElMessage.info({
+      message: '数据异常分析正在后台进行，您可以先查看文章列表，分析结果将自动更新',
+      duration: 5000
+    })
+    
   } catch (error: any) {
     console.error('Upload error:', error)
     uploadResult.value = {

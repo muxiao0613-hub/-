@@ -3,7 +3,6 @@ package com.fxt.backend.service;
 import com.fxt.backend.entity.ArticleData;
 import com.fxt.backend.dto.AnomalyAnalysisReport;
 import com.fxt.backend.dto.AnomalyAnalysisResult;
-import com.fxt.backend.dto.ImageInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;

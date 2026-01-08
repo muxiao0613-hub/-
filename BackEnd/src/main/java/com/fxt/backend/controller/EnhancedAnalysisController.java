@@ -31,7 +31,7 @@ public class EnhancedAnalysisController {
     private AIApiService aiApiService;
 
     @Autowired
-    private SeleniumCrawlerService seleniumCrawlerService;
+    private ContentCrawlerService contentCrawlerService;
 
     @Autowired
     private ExportService exportService;
@@ -192,15 +192,27 @@ public class EnhancedAnalysisController {
                 ));
             }
 
-            SeleniumCrawlerService.CrawlResult result = seleniumCrawlerService.crawlArticle(article);
-            seleniumCrawlerService.applyCrawlResultToArticle(article, result);
+            // 使用ContentCrawlerService进行爬取
+            contentCrawlerService.crawlAllContent(article);
             articleDataRepository.save(article);
 
+            // 解析图片数量
+            int imagesCount = 0;
+            if (article.getImagesInfo() != null && !article.getImagesInfo().isEmpty()) {
+                try {
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    String[] imageUrls = mapper.readValue(article.getImagesInfo(), String[].class);
+                    imagesCount = imageUrls.length;
+                } catch (Exception e) {
+                    // 忽略解析错误
+                }
+            }
+
             Map<String, Object> response = new HashMap<>();
-            response.put("success", result.isSuccess());
-            response.put("message", result.getMessage());
-            response.put("imagesCount", result.getImages() != null ? result.getImages().size() : 0);
-            response.put("content", result.getTextContent());
+            response.put("success", "SUCCESS".equals(article.getCrawlStatus()));
+            response.put("message", article.getCrawlError() != null ? article.getCrawlError() : "爬取完成");
+            response.put("imagesCount", imagesCount);
+            response.put("content", article.getContent());
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -228,9 +240,6 @@ public class EnhancedAnalysisController {
             long articlesWithAI = allArticles.stream()
                 .filter(a -> a.getAiSuggestions() != null && !a.getAiSuggestions().isEmpty())
                 .count();
-            long articlesWithImages = allArticles.stream()
-                .filter(a -> a.getImagesDownloaded() != null && a.getImagesDownloaded())
-                .count();
             long successfulCrawls = allArticles.stream()
                 .filter(a -> "SUCCESS".equals(a.getCrawlStatus()))
                 .count();
@@ -238,7 +247,6 @@ public class EnhancedAnalysisController {
             Map<String, Object> stats = new HashMap<>();
             stats.put("totalArticles", totalArticles);
             stats.put("articlesWithAI", articlesWithAI);
-            stats.put("articlesWithImages", articlesWithImages);
             stats.put("successfulCrawls", successfulCrawls);
 
             return ResponseEntity.ok(stats);
