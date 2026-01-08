@@ -4,7 +4,10 @@ import com.fxt.backend.entity.ArticleData;
 import com.fxt.backend.service.DetailedOptimizationService;
 import com.fxt.backend.service.AIRecommendationService;
 import com.fxt.backend.service.EnhancedImageDownloadService;
+import com.fxt.backend.service.AIApiService;
+import com.fxt.backend.service.PlaywrightCrawlerService;
 import com.fxt.backend.repository.ArticleDataRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -33,6 +36,12 @@ public class EnhancedAnalysisController {
     
     @Autowired
     private EnhancedImageDownloadService imageDownloadService;
+    
+    @Autowired
+    private AIApiService aiApiService;
+    
+    @Autowired
+    private PlaywrightCrawlerService playwrightCrawlerService;
     
     /**
      * 获取文章的AI建议
@@ -212,6 +221,101 @@ public class EnhancedAnalysisController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", String.format("已清理 %d 天前的下载文件", daysOld));
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.internalServerError().body(errorResponse);
+        }
+    }
+    
+    /**
+     * 获取 AI 服务状态
+     */
+    @GetMapping("/ai-status")
+    public ResponseEntity<Map<String, Object>> getAIStatus() {
+        Map<String, Object> response = new HashMap<>();
+        response.put("available", aiApiService.isAvailable());
+        response.put("message", aiApiService.isAvailable() ? 
+            "AI 服务已启用" : "AI 服务未配置，使用本地分析模式");
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * 生成真正的 AI 建议
+     */
+    @PostMapping("/articles/{id}/generate-ai")
+    public ResponseEntity<Map<String, Object>> generateRealAISuggestions(@PathVariable Long id) {
+        try {
+            ArticleData article = articleDataRepository.findById(id).orElse(null);
+            if (article == null) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            List<ArticleData> allArticles = articleDataRepository.findAll();
+            String aiSuggestions = aiApiService.generateAnalysis(article, allArticles);
+            
+            article.setAiSuggestions(aiSuggestions);
+            articleDataRepository.save(article);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("aiSuggestions", aiSuggestions);
+            response.put("aiAvailable", aiApiService.isAvailable());
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.internalServerError().body(errorResponse);
+        }
+    }
+    
+    /**
+     * 使用 Playwright 重新爬取内容
+     */
+    @PostMapping("/articles/{id}/recrawl")
+    public ResponseEntity<Map<String, Object>> recrawlArticle(@PathVariable Long id) {
+        try {
+            ArticleData article = articleDataRepository.findById(id).orElse(null);
+            if (article == null) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            String url = article.getArticleLink();
+            if (url == null || url.isEmpty()) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("success", false);
+                errorResponse.put("error", "文章链接为空");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+            
+            String articleId = article.getDataId() != null ? article.getDataId() : "article_" + article.getId();
+            PlaywrightCrawlerService.CrawlResult result = playwrightCrawlerService.crawlDewuArticle(url, articleId);
+            
+            if (result.isSuccess()) {
+                article.setContent(result.getTextContent());
+                article.setCrawlStatus("SUCCESS");
+                article.setCrawlError(null);
+                
+                if (result.getImages() != null && !result.getImages().isEmpty()) {
+                    ObjectMapper mapper = new ObjectMapper();
+                    article.setImagesInfo(mapper.writeValueAsString(result.getImages()));
+                    article.setImagesDownloaded(true);
+                    article.setLocalImagesPath(result.getLocalImagesPath());
+                }
+                
+                articleDataRepository.save(article);
+            }
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", result.isSuccess());
+            response.put("message", result.getMessage());
+            response.put("imagesCount", result.getImages() != null ? result.getImages().size() : 0);
+            response.put("content", result.getTextContent());
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {

@@ -98,6 +98,13 @@
             <artifactId>jackson-databind</artifactId>
         </dependency>
 
+        <!-- Playwright for web crawling -->
+        <dependency>
+            <groupId>com.microsoft.playwright</groupId>
+            <artifactId>playwright</artifactId>
+            <version>1.40.0</version>
+        </dependency>
+
         <!-- 数据库 -->
         <dependency>
             <groupId>com.h2database</groupId>

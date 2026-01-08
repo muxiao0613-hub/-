@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Upload from '../views/Upload.vue'
 import Dashboard from '../views/Dashboard.vue'
 import Anomaly from '../views/Anomaly.vue'
+import ArticleDetail from '../views/ArticleDetail.vue'
 
 const routes = [
   {
@@ -18,6 +19,11 @@ const routes = [
     path: '/anomaly',
     name: 'Anomaly',
     component: Anomaly
+  },
+  {
+    path: '/article/:id',
+    name: 'ArticleDetail',
+    component: ArticleDetail
   }
 ]
 

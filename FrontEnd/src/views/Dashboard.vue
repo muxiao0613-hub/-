@@ -106,7 +106,7 @@
             <el-button 
               type="primary" 
               size="small" 
-              @click="viewDetail(row)"
+              @click="goToDetail(row)"
             >
               查看详情
             </el-button>
@@ -189,13 +189,6 @@
             </div>
           </div>
         </div>
-
-        <div class="link-section" v-if="selectedArticle.articleLink">
-          <h3>原文链接</h3>
-          <el-link :href="selectedArticle.articleLink" target="_blank" type="primary">
-            {{ selectedArticle.articleLink }}
-          </el-link>
-        </div>
       </div>
     </el-dialog>
   </div>
@@ -203,9 +196,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as echarts from 'echarts'
 import { analysisApi, type ArticleData, type Statistics } from '../api'
+
+const router = useRouter()
 
 const loading = ref(false)
 const clearing = ref(false)
@@ -219,8 +215,6 @@ const statistics = ref<Statistics>({
   avgInteractionCount: 0
 })
 const statusFilter = ref('')
-const detailVisible = ref(false)
-const selectedArticle = ref<ArticleData | null>(null)
 
 const pieChartRef = ref()
 const barChartRef = ref()
@@ -346,9 +340,8 @@ const getStatusText = (status: string) => {
   }
 }
 
-const viewDetail = (article: ArticleData) => {
-  selectedArticle.value = article
-  detailVisible.value = true
+const goToDetail = (article: ArticleData) => {
+  router.push(`/article/${article.id}`)
 }
 
 const formatDate = (dateStr: string) => {

@@ -32,7 +32,7 @@
         class="article-card"
         :class="article.anomalyStatus === 'GOOD_ANOMALY' ? 'good-card' : 'bad-card'"
         shadow="hover"
-        @click="viewDetail(article)"
+        @click="goToDetail(article)"
       >
         <div class="card-header">
           <el-tag :type="article.anomalyStatus === 'GOOD_ANOMALY' ? 'success' : 'danger'" size="small" effect="dark">
@@ -59,194 +59,20 @@
       
       <el-empty v-if="filteredArticles.length === 0 && !loading" description="暂无数据" />
     </div>
-
-    <!-- 详情弹窗 -->
-    <el-dialog 
-      v-model="detailVisible" 
-      :title="selectedArticle?.title" 
-      width="90%"
-      top="3vh"
-      class="detail-dialog"
-    >
-      <div v-if="selectedArticle" class="detail-content">
-        <!-- 基本信息卡片 -->
-        <el-card class="info-card" shadow="never">
-          <div class="info-grid">
-            <div class="info-item">
-              <span class="info-label">品牌</span>
-              <span class="info-value">{{ selectedArticle.brand }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">发文类型</span>
-              <span class="info-value">{{ selectedArticle.postType }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">内容形式</span>
-              <span class="info-value">{{ selectedArticle.contentType }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">发布时间</span>
-              <span class="info-value">{{ formatDate(selectedArticle.publishTime) }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">异常评分</span>
-              <span class="info-value score" :class="getScoreClass(selectedArticle.anomalyScore)">
-                {{ selectedArticle.anomalyScore?.toFixed(1) || '-' }}
-              </span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">状态</span>
-              <el-tag :type="selectedArticle.anomalyStatus === 'GOOD_ANOMALY' ? 'success' : 'danger'" effect="dark">
-                {{ selectedArticle.anomalyStatus === 'GOOD_ANOMALY' ? '表现优秀' : '需要优化' }}
-              </el-tag>
-            </div>
-          </div>
-        </el-card>
-
-        <!-- 分块显示的Tab页 -->
-        <el-tabs v-model="activeTab" class="detail-tabs">
-          <!-- 原因分析 Tab -->
-          <el-tab-pane label="📊 原因分析" name="analysis">
-            <div class="analysis-section">
-              <h4 class="section-title">异常检测结果</h4>
-              <div v-if="parsedAnomalyReport && parsedAnomalyReport.results" class="results-grid">
-                <div v-for="result in parsedAnomalyReport.results" :key="result.metric" class="result-card">
-                  <div class="result-header">
-                    <span class="result-metric">{{ result.metric }}</span>
-                    <el-tag :type="getAnomalyLevelType(result.level)" size="small" effect="plain">
-                      {{ getAnomalyLevelText(result.level) }}
-                    </el-tag>
-                  </div>
-                  <div class="result-body">
-                    <div class="result-row">
-                      <span>当前值</span>
-                      <span class="value highlight">{{ formatNumber(result.value) }}</span>
-                    </div>
-                    <div class="result-row">
-                      <span>平均值</span>
-                      <span class="value">{{ formatNumber(result.mean) }}</span>
-                    </div>
-                    <div class="result-row">
-                      <span>偏离度</span>
-                      <span class="value" :class="result.zScore > 0 ? 'positive' : 'negative'">{{ result.deviation }}</span>
-                    </div>
-                    <div class="result-row">
-                      <span>百分位</span>
-                      <div class="percentile-bar">
-                        <div class="percentile-fill" :style="{ width: result.percentile + '%' }"></div>
-                        <span class="percentile-text">{{ result.percentile?.toFixed(0) }}%</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <el-empty v-else description="暂无详细分析数据" />
-
-              <!-- 图片分析 -->
-              <div v-if="parsedImagesInfo && parsedImagesInfo.length > 0" class="images-section">
-                <h4 class="section-title">图片内容分析</h4>
-                <div class="images-stats">
-                  <el-tag type="info">共 {{ parsedImagesInfo.length }} 张图片</el-tag>
-                  <el-tag type="success">已下载 {{ downloadedImagesCount }} 张</el-tag>
-                </div>
-                <div class="images-preview">
-                  <div v-for="(img, idx) in parsedImagesInfo.slice(0, 8)" :key="idx" class="image-card">
-                    <div class="image-type-badge">{{ getImageTypeText(img.type) }}</div>
-                    <div class="image-desc">{{ img.description }}</div>
-                    <el-tag :type="img.downloaded ? 'success' : 'info'" size="small">
-                      {{ img.downloaded ? '已下载' : '未下载' }}
-                    </el-tag>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </el-tab-pane>
-
-          <!-- 优化建议 Tab -->
-          <el-tab-pane label="💡 优化建议" name="suggestions">
-            <div class="suggestions-section">
-              <div v-if="selectedArticle.optimizationSuggestions" class="suggestions-content">
-                <pre class="suggestions-text">{{ selectedArticle.optimizationSuggestions }}</pre>
-              </div>
-              <el-empty v-else description="暂无优化建议" />
-            </div>
-          </el-tab-pane>
-
-          <!-- AI建议 Tab -->
-          <el-tab-pane label="🤖 AI智能建议" name="ai">
-            <div class="ai-section">
-              <div class="ai-header">
-                <div class="ai-badge">
-                  <span class="ai-icon">🤖</span>
-                  <span>AI智能分析</span>
-                </div>
-                <el-button type="primary" size="small" @click="regenerateAI" :loading="regenerating">
-                  重新生成
-                </el-button>
-              </div>
-              <div v-if="selectedArticle.aiSuggestions" class="ai-content">
-                <pre class="ai-text">{{ selectedArticle.aiSuggestions }}</pre>
-              </div>
-              <div v-else class="ai-empty">
-                <el-empty description="暂无AI建议">
-                  <el-button type="primary" @click="regenerateAI" :loading="regenerating">
-                    生成AI建议
-                  </el-button>
-                </el-empty>
-              </div>
-            </div>
-          </el-tab-pane>
-
-          <!-- 文章内容 Tab -->
-          <el-tab-pane label="📄 文章内容" name="content" v-if="selectedArticle.content">
-            <div class="content-section">
-              <pre class="content-text">{{ selectedArticle.content }}</pre>
-            </div>
-          </el-tab-pane>
-        </el-tabs>
-
-        <!-- 底部操作栏 -->
-        <div class="dialog-footer">
-          <el-button v-if="selectedArticle.articleLink" type="primary" @click="openLink(selectedArticle.articleLink)">
-            查看原文
-          </el-button>
-          <el-button @click="detailVisible = false">关闭</el-button>
-        </div>
-      </div>
-    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { analysisApi, type ArticleData } from '../api'
 
+const router = useRouter()
+
 const loading = ref(false)
-const regenerating = ref(false)
 const selectedType = ref('')
 const articles = ref<ArticleData[]>([])
-const detailVisible = ref(false)
-const selectedArticle = ref<ArticleData | null>(null)
-const activeTab = ref('analysis')
-
-const parsedAnomalyReport = computed(() => {
-  if (!selectedArticle.value?.anomalyDetails) return null
-  try {
-    return JSON.parse(selectedArticle.value.anomalyDetails)
-  } catch { return null }
-})
-
-const parsedImagesInfo = computed(() => {
-  if (!selectedArticle.value?.imagesInfo) return []
-  try {
-    return JSON.parse(selectedArticle.value.imagesInfo)
-  } catch { return [] }
-})
-
-const downloadedImagesCount = computed(() => 
-  parsedImagesInfo.value.filter((img: any) => img.downloaded).length
-)
 
 const filteredArticles = computed(() => 
   selectedType.value ? articles.value.filter(a => a.anomalyStatus === selectedType.value) : articles.value
@@ -268,30 +94,10 @@ const loadAnomalousArticles = async () => {
   }
 }
 
-const viewDetail = (article: ArticleData) => {
-  selectedArticle.value = article
-  detailVisible.value = true
-  activeTab.value = 'analysis'
+const goToDetail = (article: ArticleData) => {
+  router.push(`/article/${article.id}`)
 }
 
-const regenerateAI = async () => {
-  if (!selectedArticle.value?.id) return
-  regenerating.value = true
-  try {
-    const response = await fetch(`/api/enhanced/articles/${selectedArticle.value.id}/regenerate-ai`, { method: 'POST' })
-    const data = await response.json()
-    if (data.success) {
-      selectedArticle.value.aiSuggestions = data.aiSuggestions
-      ElMessage.success('AI建议已重新生成')
-    }
-  } catch (error) {
-    ElMessage.error('生成失败，请重试')
-  } finally {
-    regenerating.value = false
-  }
-}
-
-const openLink = (url: string) => window.open(url, '_blank')
 const formatNumber = (num: number | null | undefined) => num?.toLocaleString() || '0'
 const formatDate = (dateStr: string) => dateStr ? new Date(dateStr).toLocaleString('zh-CN') : ''
 const calculateRate = (article: ArticleData) => {
@@ -304,21 +110,6 @@ const getScoreClass = (score: number | undefined) => {
   if (score >= 70) return 'high'
   if (score >= 40) return 'medium'
   return 'low'
-}
-
-const getAnomalyLevelType = (level: string) => {
-  const map: Record<string, string> = { SEVERE: 'danger', MODERATE: 'warning', MILD: 'info', NORMAL: 'success' }
-  return map[level] || 'info'
-}
-
-const getAnomalyLevelText = (level: string) => {
-  const map: Record<string, string> = { SEVERE: '严重', MODERATE: '中度', MILD: '轻度', NORMAL: '正常' }
-  return map[level] || '未知'
-}
-
-const getImageTypeText = (type: string) => {
-  const map: Record<string, string> = { product: '商品', detail: '细节', scene: '场景', banner: '横幅', content: '内容' }
-  return map[type] || '图片'
 }
 </script>
 
