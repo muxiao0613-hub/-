@@ -37,7 +37,7 @@ public class SeleniumCrawlerService {
     private SeleniumConfig config;
 
     private final ExecutorService downloadExecutor = Executors.newFixedThreadPool(5);
-    private final String downloadBasePath = "downloads/images/";
+    private final String downloadBasePath = "../downloads/images/";
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final String MOBILE_USER_AGENT =
@@ -71,12 +71,22 @@ public class SeleniumCrawlerService {
             "--disable-gpu",
             "--disable-blink-features=AutomationControlled",
             "--window-size=390,844",
-            "--user-agent=" + MOBILE_USER_AGENT
+            "--user-agent=" + MOBILE_USER_AGENT,
+            // 新增以下参数
+            "--disable-web-security",
+            "--allow-running-insecure-content",
+            "--disable-features=IsolateOrigins,site-per-process"
         );
 
         // 禁用自动化检测
         options.setExperimentalOption("excludeSwitches", Collections.singletonList("enable-automation"));
         options.setExperimentalOption("useAutomationExtension", false);
+
+        // 添加浏览器偏好设置
+        Map<String, Object> prefs = new HashMap<>();
+        prefs.put("profile.managed_default_content_settings.images", 1);
+        prefs.put("profile.default_content_setting_values.notifications", 2);
+        options.setExperimentalOption("prefs", prefs);
 
         // 添加移动设备模拟
         Map<String, Object> mobileEmulation = new HashMap<>();
@@ -134,14 +144,24 @@ public class SeleniumCrawlerService {
 
             // 等待页面加载
             WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(config.getWaitTimeout()));
-            wait.until(ExpectedConditions.or(
-                ExpectedConditions.presenceOfElementLocated(By.cssSelector("[class*='content']")),
-                ExpectedConditions.presenceOfElementLocated(By.cssSelector("img")),
-                ExpectedConditions.presenceOfElementLocated(By.tagName("body"))
-            ));
+            try {
+                // 等待页面框架加载
+                wait.until(ExpectedConditions.presenceOfElementLocated(By.tagName("body")));
 
-            // 等待额外时间让动态内容加载
-            Thread.sleep(3000);
+                // 等待动态内容加载（得物需要更长时间）
+                Thread.sleep(5000);
+
+                // 尝试等待图片元素出现
+                try {
+                    new WebDriverWait(driver, Duration.ofSeconds(10))
+                        .until(ExpectedConditions.presenceOfElementLocated(
+                            By.cssSelector("img[src*='cdn'], img[src*='dewu'], img[src*='poizon']")));
+                } catch (Exception e) {
+                    logger.warn("等待图片超时，继续处理");
+                }
+            } catch (Exception e) {
+                logger.warn("页面等待异常: {}", e.getMessage());
+            }
 
             // 滚动页面加载懒加载内容
             scrollPage(driver);
@@ -257,9 +277,9 @@ public class SeleniumCrawlerService {
         try {
             JavascriptExecutor js = (JavascriptExecutor) driver;
 
-            for (int i = 0; i < 5; i++) {
+            for (int i = 0; i < 8; i++) {
                 js.executeScript("window.scrollBy(0, window.innerHeight)");
-                Thread.sleep(800);
+                Thread.sleep(1200);  // 增加等待时间让图片懒加载
             }
 
             // 滚回顶部
@@ -356,6 +376,10 @@ public class SeleniumCrawlerService {
 
         // 图片选择器列表
         String[] imageSelectors = {
+            // 新增得物专用选择器
+            "img[src*='dewu.com']", "img[src*='poizon.com']",
+            "img[src*='cdn.poizon']", "img[src*='image-h5-cdn']",
+            // 原有选择器保留
             "[class*='content'] img", "[class*='detail'] img",
             "[class*='post'] img", "[class*='image'] img",
             "[class*='photo'] img", "[class*='pic'] img",

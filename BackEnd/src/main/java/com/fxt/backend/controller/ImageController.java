@@ -15,7 +15,7 @@ import java.nio.file.Paths;
 @CrossOrigin(origins = "*", maxAge = 3600)
 public class ImageController {
     
-    private final String basePath = "downloads/images/";
+    private final String basePath = "../downloads/images/";
     
     @GetMapping("/{folder}/{filename}")
     public ResponseEntity<Resource> getImage(

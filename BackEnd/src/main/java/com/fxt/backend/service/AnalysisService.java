@@ -40,29 +40,11 @@ public class AnalysisService {
         List<ArticleData> articles = excelParserService.parseExcelFile(file);
         articles = articleDataRepository.saveAll(articles);
         anomalyDetectionService.detectAnomalies(articles);
-        processContentAsync(articles);
+        // 不再自动爬取，改为在查看详情时按需爬取
         return articleDataRepository.saveAll(articles);
     }
 
-    private void processContentAsync(List<ArticleData> articles) {
-        List<CompletableFuture<Void>> futures = articles.stream()
-            .map(article -> CompletableFuture.runAsync(() -> {
-                try {
-                    // 使用Selenium爬取服务
-                    SeleniumCrawlerService.CrawlResult crawlResult =
-                        seleniumCrawlerService.crawlArticle(article);
-                    seleniumCrawlerService.applyCrawlResultToArticle(article, crawlResult);
-                    contentAnalysisService.analyzeAndGenerateOptimizations(article);
-                    // 不自动生成AI建议（太贵）
-                    articleDataRepository.save(article);
-                } catch (Exception e) {
-                    System.err.println("处理文章失败: " + article.getTitle() + ", 错误: " + e.getMessage());
-                }
-            }, executorService))
-            .collect(Collectors.toList());
-
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-    }
+    // processContentAsync方法已移除，改为按需爬取
 
     public List<ArticleData> getAllArticles() {
         return articleDataRepository.findAll();

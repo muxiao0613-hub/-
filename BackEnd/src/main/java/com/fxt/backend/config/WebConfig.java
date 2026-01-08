@@ -11,7 +11,7 @@ public class WebConfig implements WebMvcConfigurer {
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         // 配置静态资源映射，让前端能访问下载的图片
         registry.addResourceHandler("/api/images/**")
-                .addResourceLocations("file:downloads/images/")
+                .addResourceLocations("file:../downloads/images/")
                 .setCachePeriod(3600); // 缓存1小时
     }
 }

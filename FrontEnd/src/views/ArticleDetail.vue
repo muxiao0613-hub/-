@@ -5,7 +5,7 @@
       <h2 class="page-title">{{ article?.title || '文章详情' }}</h2>
       <div class="nav-actions">
         <el-button type="primary" @click="recrawlContent" :loading="recrawling">
-          重新爬取
+          开始爬取
         </el-button>
       </div>
     </div>
@@ -55,14 +55,14 @@
               </div>
             </div>
           </div>
-          <el-empty v-else description="暂无图片内容，点击上方「重新爬取」按钮获取" :image-size="80" />
+          <el-empty v-else description="暂无图片内容，点击上方「开始爬取」按钮获取" :image-size="80" />
 
           <div class="text-content" v-if="article?.content">
             <h4>📝 文字内容</h4>
             <div class="content-text">{{ article.content }}</div>
           </div>
           <div class="text-content" v-else>
-            <el-empty description="暂无文字内容，点击上方「重新爬取」按钮获取" :image-size="60" />
+            <el-empty description="暂无文字内容，点击上方「开始爬取」按钮获取" :image-size="60" />
           </div>
         </el-card>
 
@@ -238,6 +238,10 @@ onMounted(async () => {
   if (id) {
     await loadArticle(parseInt(id))
     await checkAIStatus()
+    // 如果没有内容，提示用户点击爬取
+    if (!article.value?.content && !article.value?.imagesInfo) {
+      // 不自动爬取，由用户手动触发
+    }
   }
 })
 
