@@ -26,7 +26,7 @@ public class AnalysisService {
     private AnomalyDetectionService anomalyDetectionService;
 
     @Autowired
-    private UnifiedCrawlerService unifiedCrawlerService;
+    private SeleniumCrawlerService seleniumCrawlerService;  // 使用新的Selenium服务
 
     @Autowired
     private ContentAnalysisService contentAnalysisService;
@@ -34,7 +34,7 @@ public class AnalysisService {
     @Autowired
     private ArticleDataRepository articleDataRepository;
 
-    private final ExecutorService executorService = Executors.newFixedThreadPool(10);
+    private final ExecutorService executorService = Executors.newFixedThreadPool(5);
 
     public List<ArticleData> processExcelFile(MultipartFile file) throws Exception {
         List<ArticleData> articles = excelParserService.parseExcelFile(file);
@@ -48,10 +48,12 @@ public class AnalysisService {
         List<CompletableFuture<Void>> futures = articles.stream()
             .map(article -> CompletableFuture.runAsync(() -> {
                 try {
-                    UnifiedCrawlerService.CrawlResult crawlResult = unifiedCrawlerService.crawlArticle(article);
-                    unifiedCrawlerService.applyCrawlResultToArticle(article, crawlResult);
+                    // 使用Selenium爬取服务
+                    SeleniumCrawlerService.CrawlResult crawlResult =
+                        seleniumCrawlerService.crawlArticle(article);
+                    seleniumCrawlerService.applyCrawlResultToArticle(article, crawlResult);
                     contentAnalysisService.analyzeAndGenerateOptimizations(article);
-                    // 注意：不再自动生成AI建议
+                    // 不自动生成AI建议（太贵）
                     articleDataRepository.save(article);
                 } catch (Exception e) {
                     System.err.println("处理文章失败: " + article.getTitle() + ", 错误: " + e.getMessage());

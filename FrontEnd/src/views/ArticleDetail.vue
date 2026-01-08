@@ -164,6 +164,10 @@
               <el-button type="primary" size="small" @click="generateAI" :loading="generatingAI">
                 重新生成
               </el-button>
+              <el-button type="success" size="small" @click="exportAI" :loading="exporting">
+                <el-icon><Download /></el-icon>
+                导出Word
+              </el-button>
             </div>
           </div>
           <div v-else class="ai-empty">
@@ -197,7 +201,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Picture, Link } from '@element-plus/icons-vue'
+import { ArrowLeft, Picture, Link, Download } from '@element-plus/icons-vue'
 import { analysisApi, type ArticleData } from '../api'
 
 const route = useRoute()
@@ -206,6 +210,7 @@ const router = useRouter()
 const loading = ref(false)
 const recrawling = ref(false)
 const generatingAI = ref(false)
+const exporting = ref(false)
 const article = ref<ArticleData | null>(null)
 const aiAvailable = ref(false)
 
@@ -275,6 +280,51 @@ const generateAI = async () => {
     ElMessage.error('生成AI建议失败，请稍后重试')
   } finally {
     generatingAI.value = false
+  }
+}
+
+const exportAI = async () => {
+  if (!article.value?.id) return
+  if (!article.value?.aiSuggestions) {
+    ElMessage.warning('请先生成AI建议')
+    return
+  }
+
+  exporting.value = true
+  try {
+    const response = await fetch(`/api/enhanced/articles/${article.value.id}/export-ai`)
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.message || '导出失败')
+    }
+
+    // 获取文件名
+    const contentDisposition = response.headers.get('Content-Disposition')
+    let filename = 'AI建议.docx'
+    if (contentDisposition) {
+      const matches = contentDisposition.match(/filename\*=UTF-8''(.+)/)
+      if (matches) {
+        filename = decodeURIComponent(matches[1])
+      }
+    }
+
+    // 下载文件
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    document.body.removeChild(a)
+
+    ElMessage.success('导出成功')
+  } catch (error: any) {
+    ElMessage.error(error.message || '导出失败')
+  } finally {
+    exporting.value = false
   }
 }
 

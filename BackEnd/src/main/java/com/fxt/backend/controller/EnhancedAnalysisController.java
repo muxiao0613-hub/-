@@ -1,20 +1,23 @@
 package com.fxt.backend.controller;
 
 import com.fxt.backend.entity.ArticleData;
-import com.fxt.backend.service.DetailedOptimizationService;
-import com.fxt.backend.service.AIRecommendationService;
-import com.fxt.backend.service.EnhancedImageDownloadService;
-import com.fxt.backend.service.AIApiService;
-import com.fxt.backend.service.UnifiedCrawlerService;
+import com.fxt.backend.service.*;
 import com.fxt.backend.repository.ArticleDataRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.File;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/enhanced")
@@ -25,19 +28,15 @@ public class EnhancedAnalysisController {
     private ArticleDataRepository articleDataRepository;
 
     @Autowired
-    private DetailedOptimizationService detailedOptimizationService;
-
-    @Autowired
-    private AIRecommendationService aiRecommendationService;
-
-    @Autowired
-    private EnhancedImageDownloadService imageDownloadService;
-
-    @Autowired
     private AIApiService aiApiService;
 
     @Autowired
-    private UnifiedCrawlerService unifiedCrawlerService;
+    private SeleniumCrawlerService seleniumCrawlerService;
+
+    @Autowired
+    private ExportService exportService;
+
+    // ==================== AI建议相关接口 ====================
 
     @GetMapping("/articles/{id}/ai-suggestions")
     public ResponseEntity<Map<String, Object>> getAISuggestions(@PathVariable Long id) {
@@ -51,15 +50,10 @@ public class EnhancedAnalysisController {
             response.put("success", true);
             response.put("aiSuggestions", article.getAiSuggestions());
             response.put("hasAiSuggestions", article.getAiSuggestions() != null && !article.getAiSuggestions().isEmpty());
-            response.put("hasImages", article.getImagesDownloaded() != null && article.getImagesDownloaded());
-            response.put("imagesPath", article.getLocalImagesPath());
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", e.getMessage());
-            return ResponseEntity.internalServerError().body(errorResponse);
+            return ResponseEntity.internalServerError().body(Map.of("success", false, "error", e.getMessage()));
         }
     }
 
@@ -85,103 +79,102 @@ public class EnhancedAnalysisController {
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", e.getMessage());
-            return ResponseEntity.internalServerError().body(errorResponse);
+            return ResponseEntity.internalServerError().body(Map.of("success", false, "error", e.getMessage()));
         }
     }
 
-    @PostMapping("/articles/{id}/regenerate-ai")
-    public ResponseEntity<Map<String, Object>> regenerateAISuggestions(@PathVariable Long id) {
-        return generateAISuggestions(id);
-    }
+    // ==================== 导出功能接口 ====================
 
-    @GetMapping("/articles/{id}/images-analysis")
-    public ResponseEntity<Map<String, Object>> getImagesAnalysis(@PathVariable Long id) {
+    /**
+     * 导出单篇文章的AI建议为Word文档
+     */
+    @GetMapping("/articles/{id}/export-ai")
+    public ResponseEntity<?> exportAISuggestions(@PathVariable Long id) {
         try {
             ArticleData article = articleDataRepository.findById(id).orElse(null);
             if (article == null) {
                 return ResponseEntity.notFound().build();
             }
 
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("imagesInfo", article.getImagesInfo());
-            response.put("imagesDownloaded", article.getImagesDownloaded());
-            response.put("localImagesPath", article.getLocalImagesPath());
-            response.put("crawlStatus", article.getCrawlStatus());
+            ExportService.ExportResult result = exportService.exportAISuggestionsToWord(article);
 
-            return ResponseEntity.ok(response);
+            if (!result.isSuccess()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", result.getMessage()
+                ));
+            }
+
+            // 返回文件下载
+            File file = new File(result.getFilePath());
+            Resource resource = new FileSystemResource(file);
+
+            String encodedFileName = URLEncoder.encode(result.getFileName(), StandardCharsets.UTF_8)
+                .replace("+", "%20");
+
+            return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                    "attachment; filename*=UTF-8''" + encodedFileName)
+                .body(resource);
+
         } catch (Exception e) {
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", e.getMessage());
-            return ResponseEntity.internalServerError().body(errorResponse);
+            return ResponseEntity.internalServerError().body(Map.of("success", false, "error", e.getMessage()));
         }
     }
 
-    @GetMapping("/statistics")
-    public ResponseEntity<Map<String, Object>> getEnhancedStatistics() {
+    /**
+     * 批量导出AI建议
+     */
+    @PostMapping("/export-ai-batch")
+    public ResponseEntity<?> exportAISuggestionsBatch(@RequestBody Map<String, List<Long>> request) {
         try {
-            List<ArticleData> allArticles = articleDataRepository.findAll();
+            List<Long> ids = request.get("ids");
+            if (ids == null || ids.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", "请选择要导出的文章"
+                ));
+            }
 
-            long totalArticles = allArticles.size();
-            long articlesWithAI = allArticles.stream()
-                .mapToLong(a -> (a.getAiSuggestions() != null && !a.getAiSuggestions().isEmpty()) ? 1 : 0)
-                .sum();
-            long articlesWithImages = allArticles.stream()
-                .mapToLong(a -> (a.getImagesDownloaded() != null && a.getImagesDownloaded()) ? 1 : 0)
-                .sum();
-            long successfulCrawls = allArticles.stream()
-                .mapToLong(a -> "SUCCESS".equals(a.getCrawlStatus()) ? 1 : 0)
-                .sum();
+            List<ArticleData> articles = articleDataRepository.findAllById(ids).stream()
+                .filter(a -> a.getAiSuggestions() != null && !a.getAiSuggestions().isEmpty())
+                .collect(Collectors.toList());
 
-            Map<String, Object> stats = new HashMap<>();
-            stats.put("totalArticles", totalArticles);
-            stats.put("articlesWithAI", articlesWithAI);
-            stats.put("articlesWithImages", articlesWithImages);
-            stats.put("successfulCrawls", successfulCrawls);
-            stats.put("aiCoverage", totalArticles > 0 ? (double) articlesWithAI / totalArticles * 100 : 0);
-            stats.put("imageCoverage", totalArticles > 0 ? (double) articlesWithImages / totalArticles * 100 : 0);
-            stats.put("crawlSuccessRate", totalArticles > 0 ? (double) successfulCrawls / totalArticles * 100 : 0);
+            if (articles.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", "所选文章均无AI建议，请先生成AI建议"
+                ));
+            }
 
-            return ResponseEntity.ok(stats);
+            ExportService.ExportResult result = exportService.exportMultipleAISuggestions(articles);
+
+            if (!result.isSuccess()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", result.getMessage()
+                ));
+            }
+
+            File file = new File(result.getFilePath());
+            Resource resource = new FileSystemResource(file);
+
+            String encodedFileName = URLEncoder.encode(result.getFileName(), StandardCharsets.UTF_8)
+                .replace("+", "%20");
+
+            return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                    "attachment; filename*=UTF-8''" + encodedFileName)
+                .body(resource);
+
         } catch (Exception e) {
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", e.getMessage());
-            return ResponseEntity.internalServerError().body(errorResponse);
+            return ResponseEntity.internalServerError().body(Map.of("success", false, "error", e.getMessage()));
         }
     }
 
-    @PostMapping("/cleanup-downloads")
-    public ResponseEntity<Map<String, Object>> cleanupDownloads(
-            @RequestParam(defaultValue = "7") int daysOld) {
-        try {
-            imageDownloadService.cleanupOldDownloads(daysOld);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", String.format("已清理 %d 天前的下载文件", daysOld));
-
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", e.getMessage());
-            return ResponseEntity.internalServerError().body(errorResponse);
-        }
-    }
-
-    @GetMapping("/ai-status")
-    public ResponseEntity<Map<String, Object>> getAIStatus() {
-        Map<String, Object> response = new HashMap<>();
-        response.put("available", aiApiService.isAvailable());
-        response.put("message", aiApiService.isAvailable() ? 
-            "AI 服务已启用（OpenAI）" : "AI 服务未配置，使用本地分析模式");
-        return ResponseEntity.ok(response);
-    }
+    // ==================== 爬取相关接口 ====================
 
     @PostMapping("/articles/{id}/recrawl")
     public ResponseEntity<Map<String, Object>> recrawlArticle(@PathVariable Long id) {
@@ -193,15 +186,14 @@ public class EnhancedAnalysisController {
 
             String url = article.getArticleLink();
             if (url == null || url.isEmpty()) {
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("success", false);
-                errorResponse.put("error", "文章链接为空");
-                return ResponseEntity.badRequest().body(errorResponse);
+                return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "error", "文章链接为空"
+                ));
             }
 
-            UnifiedCrawlerService.CrawlResult result = unifiedCrawlerService.crawlArticle(article);
-            unifiedCrawlerService.applyCrawlResultToArticle(article, result);
-
+            SeleniumCrawlerService.CrawlResult result = seleniumCrawlerService.crawlArticle(article);
+            seleniumCrawlerService.applyCrawlResultToArticle(article, result);
             articleDataRepository.save(article);
 
             Map<String, Object> response = new HashMap<>();
@@ -209,14 +201,49 @@ public class EnhancedAnalysisController {
             response.put("message", result.getMessage());
             response.put("imagesCount", result.getImages() != null ? result.getImages().size() : 0);
             response.put("content", result.getTextContent());
-            response.put("hasImages", result.getImages() != null && !result.getImages().isEmpty());
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", e.getMessage());
-            return ResponseEntity.internalServerError().body(errorResponse);
+            return ResponseEntity.internalServerError().body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
+    // ==================== 其他接口 ====================
+
+    @GetMapping("/ai-status")
+    public ResponseEntity<Map<String, Object>> getAIStatus() {
+        Map<String, Object> response = new HashMap<>();
+        response.put("available", aiApiService.isAvailable());
+        response.put("message", aiApiService.isAvailable() ? 
+            "AI服务已启用（OpenAI）" : "AI服务未配置，使用本地分析模式");
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/statistics")
+    public ResponseEntity<Map<String, Object>> getEnhancedStatistics() {
+        try {
+            List<ArticleData> allArticles = articleDataRepository.findAll();
+
+            long totalArticles = allArticles.size();
+            long articlesWithAI = allArticles.stream()
+                .filter(a -> a.getAiSuggestions() != null && !a.getAiSuggestions().isEmpty())
+                .count();
+            long articlesWithImages = allArticles.stream()
+                .filter(a -> a.getImagesDownloaded() != null && a.getImagesDownloaded())
+                .count();
+            long successfulCrawls = allArticles.stream()
+                .filter(a -> "SUCCESS".equals(a.getCrawlStatus()))
+                .count();
+
+            Map<String, Object> stats = new HashMap<>();
+            stats.put("totalArticles", totalArticles);
+            stats.put("articlesWithAI", articlesWithAI);
+            stats.put("articlesWithImages", articlesWithImages);
+            stats.put("successfulCrawls", successfulCrawls);
+
+            return ResponseEntity.ok(stats);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("success", false, "error", e.getMessage()));
         }
     }
 }
