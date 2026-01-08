@@ -20,35 +20,18 @@ public class ContentAnalysisService {
     @Autowired
     private EnhancedAnalysisService enhancedAnalysisService;
     
+    @Autowired
+    private DetailedOptimizationService detailedOptimizationService;
+    
     public void analyzeAndGenerateOptimizations(ArticleData article) {
         // 1. 分析标题
         TitleAnalysis titleAnalysis = TitleAnalysis.analyze(article.getTitle());
         article.setTitleAnalysis(titleAnalysis.toJson());
         
-        // 2. 使用增强分析服务生成基于数据的分析
-        String enhancedAnalysis = enhancedAnalysisService.generateEnhancedAnalysis(article);
-        String actionableSuggestions = enhancedAnalysisService.generateActionableSuggestions(article);
+        // 2. 使用详细优化服务生成完整的分析报告
+        String detailedOptimizations = detailedOptimizationService.generateDetailedOptimizations(article);
         
-        // 3. 结合标题分析和数据分析
-        StringBuilder fullSuggestions = new StringBuilder();
-        
-        // 标题分析部分
-        fullSuggestions.append("【标题分析】\n\n");
-        fullSuggestions.append(String.format("当前标题: 「%s」\n", article.getTitle()));
-        fullSuggestions.append(String.format("标题质量评分: %.0f/100\n\n", titleAnalysis.getQualityScore()));
-        
-        generateTitleSuggestions(titleAnalysis, fullSuggestions);
-        
-        // 数据分析部分
-        fullSuggestions.append(enhancedAnalysis);
-        
-        // 行动建议部分
-        fullSuggestions.append(actionableSuggestions);
-        
-        // 内容类型专门建议
-        generateContentTypeSuggestions(article, fullSuggestions);
-        
-        article.setOptimizationSuggestions(fullSuggestions.toString());
+        article.setOptimizationSuggestions(detailedOptimizations);
     }
     
     private void generateTitleSuggestions(TitleAnalysis titleAnalysis, StringBuilder sb) {

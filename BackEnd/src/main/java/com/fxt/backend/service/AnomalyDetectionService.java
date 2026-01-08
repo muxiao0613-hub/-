@@ -1,119 +1,69 @@
 package com.fxt.backend.service;
 
 import com.fxt.backend.entity.ArticleData;
-import com.fxt.backend.dto.*;
+import com.fxt.backend.repository.ArticleDataRepository;
+import com.fxt.backend.dto.AnomalyAnalysisReport;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 public class AnomalyDetectionService {
     
+    @Autowired
+    private ArticleDataRepository articleDataRepository;
+    
+    @Autowired
+    private AdvancedAnomalyDetectionService advancedAnomalyDetectionService;
+    
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    
     public void detectAnomalies(List<ArticleData> articles) {
-        // 1. 计算所有指标的统计数据
-        StatisticsContext context = calculateStatistics(articles);
-        
-        // 2. 为每篇文章生成详细的异常分析
+        // 为每篇文章进行高级异常检测
         for (ArticleData article : articles) {
-            AnomalyAnalysisReport report = analyzeArticle(article, context);
-            
-            // 3. 设置异常状态和详细分析
-            article.setAnomalyStatus(report.getOverallStatus());
-            article.setAnomalyDetails(report.toJson());
-            article.setAnomalyScore(report.getOverallScore());
+            detectAndAnalyzeAnomalies(article, articles);
         }
     }
     
-    private StatisticsContext calculateStatistics(List<ArticleData> articles) {
-        // 提取各指标的有效数据
-        List<Double> readCounts = articles.stream()
-            .filter(a -> a.getReadCount7d() != null && a.getReadCount7d() > 0)
-            .map(a -> a.getReadCount7d().doubleValue())
-            .collect(Collectors.toList());
-            
-        List<Double> interactionCounts = articles.stream()
-            .filter(a -> a.getInteractionCount7d() != null && a.getInteractionCount7d() > 0)
-            .map(a -> a.getInteractionCount7d().doubleValue())
-            .collect(Collectors.toList());
-            
-        List<Double> shareCounts = articles.stream()
-            .filter(a -> a.getShareCount7d() != null && a.getShareCount7d() > 0)
-            .map(a -> a.getShareCount7d().doubleValue())
-            .collect(Collectors.toList());
-            
-        List<Double> productVisits = articles.stream()
-            .filter(a -> a.getProductVisitCount() != null && a.getProductVisitCount() > 0)
-            .map(a -> a.getProductVisitCount().doubleValue())
-            .collect(Collectors.toList());
+    public void detectAndAnalyzeAnomalies(ArticleData article, List<ArticleData> allArticles) {
+        // 使用高级异常检测服务
+        AnomalyAnalysisReport report = advancedAnomalyDetectionService.detectAnomalies(article, allArticles);
         
-        return new StatisticsContext(
-            new MetricStatistics(readCounts),
-            new MetricStatistics(interactionCounts),
-            new MetricStatistics(shareCounts),
-            new MetricStatistics(productVisits)
-        );
+        // 设置异常状态和评分
+        article.setAnomalyStatus(report.getOverallStatus());
+        article.setAnomalyScore(report.getOverallScore());
+        
+        // 将详细报告序列化为JSON存储
+        try {
+            String reportJson = objectMapper.writeValueAsString(report);
+            article.setAnomalyDetails(reportJson);
+        } catch (Exception e) {
+            article.setAnomalyDetails("{}");
+        }
+        
+        // 计算并存储关键指标
+        calculateAndStoreMetrics(article, allArticles);
     }
     
-    private AnomalyAnalysisReport analyzeArticle(ArticleData article, StatisticsContext context) {
-        AnomalyAnalysisReport report = new AnomalyAnalysisReport();
-        
-        // 分析阅读量
-        if (article.getReadCount7d() != null && article.getReadCount7d() > 0) {
-            AnomalyAnalysisResult readResult = analyzeMetric(
-                "7天阅读量",
-                article.getReadCount7d().doubleValue(),
-                context.getReadCountStats()
-            );
-            report.addResult(readResult);
+    private void calculateAndStoreMetrics(ArticleData article, List<ArticleData> allArticles) {
+        // 计算互动率
+        if (article.getReadCount7d() != null && article.getReadCount7d() > 0 && article.getInteractionCount7d() != null) {
+            double interactionRate = (double) article.getInteractionCount7d() / article.getReadCount7d() * 100;
+            // 可以添加字段存储，或在需要时计算
         }
         
-        // 分析互动量
-        if (article.getInteractionCount7d() != null && article.getInteractionCount7d() > 0) {
-            AnomalyAnalysisResult interactionResult = analyzeMetric(
-                "7天互动量",
-                article.getInteractionCount7d().doubleValue(),
-                context.getInteractionCountStats()
-            );
-            report.addResult(interactionResult);
+        // 计算转化率
+        if (article.getReadCount7d() != null && article.getReadCount7d() > 0 && article.getProductVisit7d() != null) {
+            double conversionRate = (double) article.getProductVisit7d() / article.getReadCount7d() * 100;
+            // 可以添加字段存储，或在需要时计算
         }
         
-        // 分析分享量
-        if (article.getShareCount7d() != null && article.getShareCount7d() > 0) {
-            AnomalyAnalysisResult shareResult = analyzeMetric(
-                "7天分享量",
-                article.getShareCount7d().doubleValue(),
-                context.getShareCountStats()
-            );
-            report.addResult(shareResult);
+        // 计算增长率
+        if (article.getReadCount7d() != null && article.getReadCount7d() > 0 && article.getReadCount14d() != null) {
+            double growthRate = (double) (article.getReadCount14d() - article.getReadCount7d()) / article.getReadCount7d() * 100;
+            // 可以添加字段存储，或在需要时计算
         }
-        
-        // 分析好物访问量
-        if (article.getProductVisitCount() != null && article.getProductVisitCount() > 0) {
-            AnomalyAnalysisResult productResult = analyzeMetric(
-                "好物访问量",
-                article.getProductVisitCount().doubleValue(),
-                context.getProductVisitStats()
-            );
-            report.addResult(productResult);
-        }
-        
-        // 综合评估
-        report.calculateOverallStatus();
-        
-        return report;
-    }
-    
-    private AnomalyAnalysisResult analyzeMetric(String metricName, double value, MetricStatistics stats) {
-        AnomalyAnalysisResult result = new AnomalyAnalysisResult();
-        result.setMetric(metricName);
-        result.setValue(value);
-        result.setMean(stats.getMean());
-        result.setStdDev(stats.getStdDev());
-        
-        // 计算百分位
-        result.setPercentile(stats.calculatePercentile(value));
-        
-        return result;
     }
 }
