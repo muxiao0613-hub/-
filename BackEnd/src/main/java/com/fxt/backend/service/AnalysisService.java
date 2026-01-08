@@ -32,6 +32,9 @@ public class AnalysisService {
     private ContentAnalysisService contentAnalysisService;
     
     @Autowired
+    private DetailedOptimizationService detailedOptimizationService;
+    
+    @Autowired
     private ArticleDataRepository articleDataRepository;
     
     private final ExecutorService executorService = Executors.newFixedThreadPool(10);
@@ -62,6 +65,10 @@ public class AnalysisService {
                     
                     // 生成优化建议
                     contentAnalysisService.analyzeAndGenerateOptimizations(article);
+                    
+                    // 生成AI建议
+                    String aiSuggestions = detailedOptimizationService.generateAISuggestions(article);
+                    article.setAiSuggestions(aiSuggestions);
                     
                     // 保存更新
                     articleDataRepository.save(article);

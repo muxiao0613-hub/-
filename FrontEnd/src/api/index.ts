@@ -91,6 +91,10 @@ export interface ArticleData {
   crawlStatus?: string
   crawlError?: string
   optimizationSuggestions?: string
+  aiSuggestions?: string
+  imagesInfo?: string
+  imagesDownloaded?: boolean
+  localImagesPath?: string
   createdAt?: string
   updatedAt?: string
 }

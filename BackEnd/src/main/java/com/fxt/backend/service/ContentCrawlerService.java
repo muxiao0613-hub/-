@@ -1,26 +1,35 @@
 package com.fxt.backend.service;
 
 import com.fxt.backend.entity.ArticleData;
+import com.fxt.backend.dto.ImageInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 @Service
 public class ContentCrawlerService {
     
     private final WebClient webClient;
+    private final ObjectMapper objectMapper;
+    
+    @Autowired
+    private EnhancedImageDownloadService imageDownloadService;
     
     public ContentCrawlerService() {
         this.webClient = WebClient.builder()
             .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(1024 * 1024))
             .build();
+        this.objectMapper = new ObjectMapper();
     }
     
     public CompletableFuture<String> crawlContent(String url) {
@@ -109,10 +118,58 @@ public class ContentCrawlerService {
             String content = crawlContent(articleLink).get();
             
             if (content != null && !content.trim().isEmpty()) {
-                article.setContent(content);
+                // 解析HTML获取Document对象用于图片下载
+                Document doc = Jsoup.parse(content);
+                
+                // 提取文本内容
+                String textContent = extractContent(content);
+                article.setContent(textContent);
+                
+                // 异步下载图片
+                String articleId = article.getDataId() != null ? article.getDataId() : "article_" + article.getId();
+                CompletableFuture<List<ImageInfo>> imageDownloadFuture = 
+                    imageDownloadService.extractAndDownloadImages(doc, articleId);
+                
+                // 等待图片下载完成并保存信息
+                imageDownloadFuture.thenAccept(images -> {
+                    try {
+                        if (!images.isEmpty()) {
+                            // 保存图片信息为JSON
+                            String imagesJson = objectMapper.writeValueAsString(images);
+                            article.setImagesInfo(imagesJson);
+                            
+                            // 生成图片报告并添加到内容中
+                            String imageReport = imageDownloadService.generateImageReport(images);
+                            article.setContent(textContent + "\n\n" + imageReport);
+                            
+                            // 设置图片下载状态
+                            long downloadedCount = images.stream().mapToLong(img -> img.getDownloaded() ? 1 : 0).sum();
+                            article.setImagesDownloaded(downloadedCount > 0);
+                            
+                            // 保存本地路径信息
+                            if (downloadedCount > 0) {
+                                String basePath = "downloads/images/" + articleId + "/";
+                                article.setLocalImagesPath(basePath);
+                            }
+                            
+                            System.out.println("图片下载完成，共下载 " + downloadedCount + " 张图片");
+                        } else {
+                            article.setImagesDownloaded(false);
+                            System.out.println("未发现可下载的图片");
+                        }
+                    } catch (Exception e) {
+                        System.err.println("保存图片信息失败: " + e.getMessage());
+                        article.setImagesDownloaded(false);
+                    }
+                }).exceptionally(throwable -> {
+                    System.err.println("图片下载过程出错: " + throwable.getMessage());
+                    article.setImagesDownloaded(false);
+                    return null;
+                });
+                
                 article.setCrawlStatus("SUCCESS");
                 article.setCrawlError(null);
-                System.out.println("内容抓取成功，长度: " + content.length());
+                System.out.println("内容抓取成功，长度: " + textContent.length());
             } else {
                 // 内容为空，使用标题作为备选
                 String fallbackContent = "标题: " + (article.getTitle() != null ? article.getTitle() : "无标题");
@@ -122,6 +179,7 @@ public class ContentCrawlerService {
                 article.setContent(fallbackContent);
                 article.setCrawlStatus("PARTIAL");
                 article.setCrawlError("抓取到的内容为空，使用标题作为替代");
+                article.setImagesDownloaded(false);
                 System.out.println("内容抓取为空，使用备选内容");
             }
         } catch (Exception e) {
@@ -136,6 +194,7 @@ public class ContentCrawlerService {
             article.setContent(fallbackContent);
             article.setCrawlStatus("FAILED");
             article.setCrawlError("抓取失败: " + e.getMessage());
+            article.setImagesDownloaded(false);
             
             System.err.println("内容抓取失败 - 文章: " + article.getTitle() + 
                              ", 链接: " + articleLink + 

@@ -171,8 +171,88 @@
             </div>
           </el-tab-pane>
           
+          <el-tab-pane label="原因分析" name="analysis" v-if="selectedArticle.anomalyDetails">
+            <div class="analysis-display">
+              <div class="analysis-section">
+                <h3>📊 异常检测结果</h3>
+                <div v-if="parsedAnomalyReport && parsedAnomalyReport.results" class="anomaly-results">
+                  <div v-for="result in parsedAnomalyReport.results" :key="result.metric" class="result-item">
+                    <div class="metric-header">
+                      <span class="metric-name">{{ result.metric }}</span>
+                      <el-tag :type="getAnomalyLevelType(result.level)" size="small">
+                        {{ getAnomalyLevelText(result.level) }}
+                      </el-tag>
+                    </div>
+                    <div class="metric-details">
+                      <div class="detail-row">
+                        <span>当前值:</span>
+                        <span class="value">{{ formatNumber(result.value) }}</span>
+                      </div>
+                      <div class="detail-row">
+                        <span>平均值:</span>
+                        <span class="value">{{ formatNumber(result.mean) }}</span>
+                      </div>
+                      <div class="detail-row">
+                        <span>偏离程度:</span>
+                        <span class="value">{{ result.deviation }}</span>
+                      </div>
+                      <div class="detail-row">
+                        <span>百分位:</span>
+                        <span class="value">第 {{ result.percentile?.toFixed(0) }} 百分位</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="no-data">
+                  暂无详细异常分析数据
+                </div>
+              </div>
+              
+              <div class="analysis-section" v-if="selectedArticle.imagesInfo">
+                <h3>🖼️ 图片内容分析</h3>
+                <div class="images-analysis">
+                  <div v-if="parsedImagesInfo && parsedImagesInfo.length > 0">
+                    <div class="images-summary">
+                      <el-tag type="info">共 {{ parsedImagesInfo.length }} 张图片</el-tag>
+                      <el-tag type="success">已下载 {{ downloadedImagesCount }} 张</el-tag>
+                    </div>
+                    <div class="images-grid">
+                      <div v-for="(image, index) in parsedImagesInfo.slice(0, 6)" :key="index" class="image-item">
+                        <div class="image-info">
+                          <div class="image-description">{{ image.description }}</div>
+                          <div class="image-type">类型: {{ getImageTypeText(image.type) }}</div>
+                          <div class="image-status">
+                            <el-tag :type="image.downloaded ? 'success' : 'warning'" size="small">
+                              {{ image.downloaded ? '已下载' : '未下载' }}
+                            </el-tag>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="no-data">
+                    暂无图片信息
+                  </div>
+                </div>
+              </div>
+            </div>
+          </el-tab-pane>
+          
           <el-tab-pane label="优化建议" name="suggestions" v-if="selectedArticle.optimizationSuggestions">
-            <div class="suggestions-display" v-html="formatSuggestions(selectedArticle.optimizationSuggestions)">
+            <div class="suggestions-display">
+              <div class="suggestions-content" v-html="formatSuggestions(selectedArticle.optimizationSuggestions)">
+              </div>
+            </div>
+          </el-tab-pane>
+          
+          <el-tab-pane label="AI智能建议" name="ai-suggestions" v-if="selectedArticle.aiSuggestions">
+            <div class="ai-suggestions-display">
+              <div class="ai-header">
+                <h3>🤖 AI智能分析与建议</h3>
+                <el-tag type="primary" size="small">基于机器学习算法生成</el-tag>
+              </div>
+              <div class="ai-content" v-html="formatSuggestions(selectedArticle.aiSuggestions)">
+              </div>
             </div>
           </el-tab-pane>
         </el-tabs>
@@ -192,6 +272,29 @@ const articles = ref<ArticleData[]>([])
 const detailVisible = ref(false)
 const selectedArticle = ref<ArticleData | null>(null)
 const activeTab = ref('basic')
+
+// 计算属性
+const parsedAnomalyReport = computed(() => {
+  if (!selectedArticle.value?.anomalyDetails) return null
+  try {
+    return JSON.parse(selectedArticle.value.anomalyDetails)
+  } catch (e) {
+    return null
+  }
+})
+
+const parsedImagesInfo = computed(() => {
+  if (!selectedArticle.value?.imagesInfo) return []
+  try {
+    return JSON.parse(selectedArticle.value.imagesInfo)
+  } catch (e) {
+    return []
+  }
+})
+
+const downloadedImagesCount = computed(() => {
+  return parsedImagesInfo.value.filter((img: any) => img.downloaded).length
+})
 
 const filteredArticles = computed(() => {
   if (!selectedType.value) {
@@ -253,6 +356,36 @@ const getSuggestionsPreview = (suggestions: string) => {
 const formatSuggestions = (suggestions: string) => {
   if (!suggestions) return ''
   return suggestions.replace(/\n/g, '<br>')
+}
+
+const getAnomalyLevelType = (level: string) => {
+  switch (level) {
+    case 'SEVERE': return 'danger'
+    case 'MODERATE': return 'warning'
+    case 'MILD': return 'info'
+    default: return 'success'
+  }
+}
+
+const getAnomalyLevelText = (level: string) => {
+  switch (level) {
+    case 'SEVERE': return '严重异常'
+    case 'MODERATE': return '中度异常'
+    case 'MILD': return '轻度异常'
+    default: return '正常'
+  }
+}
+
+const getImageTypeText = (type: string) => {
+  switch (type) {
+    case 'product': return '商品图'
+    case 'detail': return '细节图'
+    case 'scene': return '场景图'
+    case 'avatar': return '头像'
+    case 'logo': return '标识'
+    case 'banner': return '横幅'
+    default: return '内容图'
+  }
 }
 </script>
 
@@ -418,5 +551,148 @@ const formatSuggestions = (suggestions: string) => {
 
 .suggestions-display {
   white-space: pre-wrap;
+}
+
+.analysis-display {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.analysis-section {
+  margin-bottom: 30px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.analysis-section h3 {
+  margin: 0 0 15px 0;
+  color: #409EFF;
+  font-size: 16px;
+}
+
+.anomaly-results {
+  display: grid;
+  gap: 15px;
+}
+
+.result-item {
+  background: white;
+  padding: 15px;
+  border-radius: 6px;
+  border-left: 4px solid #409EFF;
+}
+
+.metric-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.metric-name {
+  font-weight: bold;
+  color: #303133;
+}
+
+.metric-details {
+  display: grid;
+  gap: 5px;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+}
+
+.detail-row .value {
+  font-weight: bold;
+  color: #409EFF;
+}
+
+.images-analysis {
+  background: white;
+  padding: 15px;
+  border-radius: 6px;
+}
+
+.images-summary {
+  margin-bottom: 15px;
+  display: flex;
+  gap: 10px;
+}
+
+.images-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 15px;
+}
+
+.image-item {
+  background: #f5f7fa;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #e4e7ed;
+}
+
+.image-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.image-description {
+  font-weight: bold;
+  color: #303133;
+  font-size: 14px;
+}
+
+.image-type {
+  font-size: 12px;
+  color: #606266;
+}
+
+.image-status {
+  align-self: flex-start;
+}
+
+.ai-suggestions-display {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px;
+  border-radius: 8px;
+  margin: -20px;
+}
+
+.ai-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.ai-header h3 {
+  margin: 0;
+  color: white;
+  font-size: 18px;
+}
+
+.ai-content {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 20px;
+  border-radius: 6px;
+  white-space: pre-wrap;
+  line-height: 1.6;
+  backdrop-filter: blur(10px);
+}
+
+.no-data {
+  text-align: center;
+  color: #909399;
+  padding: 20px;
+  font-style: italic;
 }
 </style>

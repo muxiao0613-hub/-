@@ -94,6 +94,18 @@ public class ArticleData {
     @Column(name = "optimization_suggestions", columnDefinition = "TEXT")
     private String optimizationSuggestions;
     
+    @Column(name = "ai_suggestions", columnDefinition = "TEXT")
+    private String aiSuggestions; // AI生成的智能建议
+    
+    @Column(name = "images_info", columnDefinition = "TEXT")
+    private String imagesInfo; // 图片信息JSON格式
+    
+    @Column(name = "images_downloaded")
+    private Boolean imagesDownloaded; // 图片是否已下载
+    
+    @Column(name = "local_images_path", columnDefinition = "TEXT")
+    private String localImagesPath; // 本地图片存储路径
+    
     @Column(name = "created_at")
     private LocalDateTime createdAt;
     
@@ -193,6 +205,18 @@ public class ArticleData {
 
     public String getOptimizationSuggestions() { return optimizationSuggestions; }
     public void setOptimizationSuggestions(String optimizationSuggestions) { this.optimizationSuggestions = optimizationSuggestions; }
+
+    public String getAiSuggestions() { return aiSuggestions; }
+    public void setAiSuggestions(String aiSuggestions) { this.aiSuggestions = aiSuggestions; }
+
+    public String getImagesInfo() { return imagesInfo; }
+    public void setImagesInfo(String imagesInfo) { this.imagesInfo = imagesInfo; }
+
+    public Boolean getImagesDownloaded() { return imagesDownloaded; }
+    public void setImagesDownloaded(Boolean imagesDownloaded) { this.imagesDownloaded = imagesDownloaded; }
+
+    public String getLocalImagesPath() { return localImagesPath; }
+    public void setLocalImagesPath(String localImagesPath) { this.localImagesPath = localImagesPath; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

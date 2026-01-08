@@ -22,6 +22,9 @@ public class DetailedOptimizationService {
     @Autowired
     private ArticleDataRepository articleDataRepository;
     
+    @Autowired
+    private AIRecommendationService aiRecommendationService;
+    
     private final ObjectMapper objectMapper = new ObjectMapper();
     
     public String generateDetailedOptimizations(ArticleData article) {
@@ -182,6 +185,14 @@ public class DetailedOptimizationService {
         generateActionableSuggestions(article, report, typeStats, bestType);
         
         return report.toString();
+    }
+    
+    /**
+     * 生成AI智能建议（独立方法）
+     */
+    public String generateAISuggestions(ArticleData article) {
+        List<ArticleData> allArticles = articleDataRepository.findAll();
+        return aiRecommendationService.generateAIRecommendations(article, allArticles);
     }
     
     private void analyzeTitleIssues(String title, StringBuilder report) {
