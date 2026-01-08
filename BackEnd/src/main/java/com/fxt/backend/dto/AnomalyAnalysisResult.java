@@ -7,10 +7,10 @@ public class AnomalyAnalysisResult {
     private double stdDev;           // 标准差
     private double zScore;           // Z分数
     private double percentile;       // 百分位
-    private String deviation;        // 偏离描述 (如 "高于平均值 150%")
+    private String deviation;        // 偏离描述
     private String level;            // 异常级别 (SEVERE/MODERATE/MILD/NORMAL)
+    private Double weight;           // 权重（新增字段）
 
-    // 构造函数
     public AnomalyAnalysisResult() {}
 
     public AnomalyAnalysisResult(String metric, double value, double mean, double stdDev) {
@@ -22,14 +22,12 @@ public class AnomalyAnalysisResult {
     }
 
     private void calculateDerivedValues() {
-        // 计算Z分数
         if (stdDev > 0) {
             this.zScore = (value - mean) / stdDev;
         } else {
             this.zScore = 0;
         }
 
-        // 生成偏离描述
         if (mean > 0) {
             double deviationPercent = ((value - mean) / mean) * 100;
             if (deviationPercent > 0) {
@@ -41,7 +39,6 @@ public class AnomalyAnalysisResult {
             this.deviation = "无法计算偏离度";
         }
 
-        // 判断异常级别
         double absZScore = Math.abs(zScore);
         if (absZScore > 3) {
             this.level = "SEVERE";
@@ -87,4 +84,7 @@ public class AnomalyAnalysisResult {
 
     public String getLevel() { return level; }
     public void setLevel(String level) { this.level = level; }
+    
+    public Double getWeight() { return weight; }
+    public void setWeight(Double weight) { this.weight = weight; }
 }

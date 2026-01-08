@@ -14,6 +14,7 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
 
 @Service
@@ -24,6 +25,9 @@ public class ContentCrawlerService {
     
     @Autowired
     private EnhancedImageDownloadService imageDownloadService;
+    
+    @Autowired
+    private DewuImageCrawlerService dewuImageCrawlerService;
     
     public ContentCrawlerService() {
         this.webClient = WebClient.builder()
@@ -125,47 +129,80 @@ public class ContentCrawlerService {
                 String textContent = extractContent(content);
                 article.setContent(textContent);
                 
-                // 异步下载图片
+                // 异步下载图片 - 优先使用您的Selenium爬取方案
                 String articleId = article.getDataId() != null ? article.getDataId() : "article_" + article.getId();
-                CompletableFuture<List<ImageInfo>> imageDownloadFuture = 
-                    imageDownloadService.extractAndDownloadImages(doc, articleId);
                 
-                // 等待图片下载完成并保存信息
-                imageDownloadFuture.thenAccept(images -> {
-                    try {
-                        if (!images.isEmpty()) {
-                            // 保存图片信息为JSON
-                            String imagesJson = objectMapper.writeValueAsString(images);
-                            article.setImagesInfo(imagesJson);
-                            
-                            // 生成图片报告并添加到内容中
-                            String imageReport = imageDownloadService.generateImageReport(images);
-                            article.setContent(textContent + "\n\n" + imageReport);
-                            
-                            // 设置图片下载状态
-                            long downloadedCount = images.stream().mapToLong(img -> img.getDownloaded() ? 1 : 0).sum();
-                            article.setImagesDownloaded(downloadedCount > 0);
-                            
-                            // 保存本地路径信息
-                            if (downloadedCount > 0) {
-                                String basePath = "downloads/images/" + articleId + "/";
-                                article.setLocalImagesPath(basePath);
+                // 检查是否为得物链接，使用专门的爬取服务
+                if (articleLink.contains("dewu.com") || articleLink.contains("得物")) {
+                    CompletableFuture<DewuImageCrawlerService.ImageCrawlResult> dewuImageFuture = 
+                        dewuImageCrawlerService.crawlAndDownloadImages(articleLink, articleId);
+                    
+                    dewuImageFuture.thenAccept(crawlResult -> {
+                        try {
+                            if ("SUCCESS".equals(crawlResult.getStatus())) {
+                                // 转换为通用格式
+                                List<ImageInfo> images = convertDewuResultToImageInfo(crawlResult);
+                                String imagesJson = objectMapper.writeValueAsString(images);
+                                article.setImagesInfo(imagesJson);
+                                
+                                // 添加得物专用分析报告
+                                String enhancedContent = textContent + "\n\n" + crawlResult.getAnalysisReport();
+                                article.setContent(enhancedContent);
+                                
+                                article.setImagesDownloaded(crawlResult.getSuccessCount() > 0);
+                                article.setLocalImagesPath(crawlResult.getLocalPath());
+                                
+                                System.out.println("得物图片爬取完成，共下载 " + crawlResult.getSuccessCount() + " 张图片");
+                            } else {
+                                System.err.println("得物图片爬取失败: " + crawlResult.getMessage());
+                                article.setImagesDownloaded(false);
                             }
-                            
-                            System.out.println("图片下载完成，共下载 " + downloadedCount + " 张图片");
-                        } else {
+                        } catch (Exception e) {
+                            System.err.println("处理得物爬取结果失败: " + e.getMessage());
                             article.setImagesDownloaded(false);
-                            System.out.println("未发现可下载的图片");
                         }
-                    } catch (Exception e) {
-                        System.err.println("保存图片信息失败: " + e.getMessage());
+                    }).exceptionally(throwable -> {
+                        System.err.println("得物图片爬取过程出错: " + throwable.getMessage());
                         article.setImagesDownloaded(false);
-                    }
-                }).exceptionally(throwable -> {
-                    System.err.println("图片下载过程出错: " + throwable.getMessage());
-                    article.setImagesDownloaded(false);
-                    return null;
-                });
+                        return null;
+                    });
+                } else {
+                    // 使用通用图片下载服务
+                    CompletableFuture<List<ImageInfo>> imageDownloadFuture = 
+                        imageDownloadService.extractAndDownloadImages(doc, articleId);
+                    
+                    imageDownloadFuture.thenAccept(images -> {
+                        try {
+                            if (!images.isEmpty()) {
+                                String imagesJson = objectMapper.writeValueAsString(images);
+                                article.setImagesInfo(imagesJson);
+                                
+                                String imageReport = imageDownloadService.generateImageReport(images);
+                                article.setContent(textContent + "\n\n" + imageReport);
+                                
+                                long downloadedCount = images.stream().mapToLong(img -> img.getDownloaded() ? 1 : 0).sum();
+                                article.setImagesDownloaded(downloadedCount > 0);
+                                
+                                if (downloadedCount > 0) {
+                                    String basePath = "downloads/images/" + articleId + "/";
+                                    article.setLocalImagesPath(basePath);
+                                }
+                                
+                                System.out.println("通用图片下载完成，共下载 " + downloadedCount + " 张图片");
+                            } else {
+                                article.setImagesDownloaded(false);
+                                System.out.println("未发现可下载的图片");
+                            }
+                        } catch (Exception e) {
+                            System.err.println("保存图片信息失败: " + e.getMessage());
+                            article.setImagesDownloaded(false);
+                        }
+                    }).exceptionally(throwable -> {
+                        System.err.println("图片下载过程出错: " + throwable.getMessage());
+                        article.setImagesDownloaded(false);
+                        return null;
+                    });
+                }
                 
                 article.setCrawlStatus("SUCCESS");
                 article.setCrawlError(null);
@@ -547,5 +584,48 @@ public class ContentCrawlerService {
         }
         
         return "";
+    }
+    
+    /**
+     * 将得物爬取结果转换为通用ImageInfo格式
+     */
+    private List<ImageInfo> convertDewuResultToImageInfo(DewuImageCrawlerService.ImageCrawlResult crawlResult) {
+        List<ImageInfo> imageInfos = new ArrayList<>();
+        
+        if (crawlResult.getDownloadedImages() != null) {
+            for (DewuImageCrawlerService.ImageDownloadInfo dewuInfo : crawlResult.getDownloadedImages()) {
+                ImageInfo imageInfo = new ImageInfo();
+                imageInfo.setUrl(dewuInfo.getUrl());
+                imageInfo.setLocalPath(dewuInfo.getLocalPath());
+                imageInfo.setFileSize(dewuInfo.getFileSize());
+                imageInfo.setDownloaded(dewuInfo.isSuccess());
+                imageInfo.setType(dewuInfo.getImageType());
+                imageInfo.setWidth(dewuInfo.getEstimatedWidth());
+                imageInfo.setHeight(dewuInfo.getEstimatedHeight());
+                
+                // 生成描述
+                String description = String.format("得物图片 - %s", 
+                    dewuInfo.getImageType() != null ? getTypeDisplayName(dewuInfo.getImageType()) : "内容图");
+                if (dewuInfo.getFormat() != null) {
+                    description += " [" + dewuInfo.getFormat() + "]";
+                }
+                imageInfo.setDescription(description);
+                
+                imageInfos.add(imageInfo);
+            }
+        }
+        
+        return imageInfos;
+    }
+    
+    private String getTypeDisplayName(String type) {
+        switch (type) {
+            case "product": return "商品图";
+            case "detail": return "细节图";
+            case "scene": return "场景图";
+            case "model": return "模特图";
+            case "brand": return "品牌图";
+            default: return "内容图";
+        }
     }
 }
