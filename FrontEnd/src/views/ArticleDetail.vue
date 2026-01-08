@@ -294,7 +294,15 @@ const goBack = () => {
 
 const getImageUrl = (localPath: string) => {
   // 将本地路径转换为可访问的URL
-  return `/api/images/${localPath.replace('downloads/images/', '')}`
+  // 处理不同的路径格式
+  let imagePath = localPath
+  if (imagePath.startsWith('downloads/images/')) {
+    imagePath = imagePath.replace('downloads/images/', '')
+  }
+  if (imagePath.startsWith('downloads\\images\\')) {
+    imagePath = imagePath.replace('downloads\\images\\', '').replace(/\\/g, '/')
+  }
+  return `/api/images/${imagePath}`
 }
 
 const handleImageError = (e: Event) => {
@@ -364,7 +372,7 @@ const getScoreClass = (score: number | undefined) => {
 
 .detail-layout {
   display: grid;
-  grid-template-columns: 1fr 400px;
+  grid-template-columns: 1fr 600px;  /* 增加右侧宽度从400px到600px */
   gap: 20px;
   align-items: start;
 }
@@ -572,7 +580,7 @@ const getScoreClass = (score: number | undefined) => {
   background: rgba(255,255,255,0.1);
   border-radius: 8px;
   padding: 16px;
-  max-height: 400px;
+  max-height: 500px;  /* 增加高度从400px到500px */
   overflow-y: auto;
 }
 
@@ -598,7 +606,7 @@ const getScoreClass = (score: number | undefined) => {
 
 /* 优化建议卡片 */
 .optimization-content {
-  max-height: 400px;
+  max-height: 500px;  /* 增加高度从400px到500px */
   overflow-y: auto;
 }
 

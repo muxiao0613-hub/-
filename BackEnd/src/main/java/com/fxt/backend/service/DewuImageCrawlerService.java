@@ -36,7 +36,7 @@ public class DewuImageCrawlerService {
             .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(10 * 1024 * 1024)) // 10MB
             .build();
         this.downloadExecutor = Executors.newFixedThreadPool(3); // 3个并发下载线程
-        this.baseDownloadPath = "downloads/dewu-images/";
+        this.baseDownloadPath = "downloads/images/";
         
         // 创建下载目录
         try {
