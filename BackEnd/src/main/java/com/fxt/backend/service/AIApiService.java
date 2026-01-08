@@ -145,28 +145,38 @@ public class AIApiService {
     }
     
     /**
-     * 构建分析提示词
+     * 构建分析提示词 - 根据图文内容和数据给出针对性建议
      */
     private String buildAnalysisPrompt(ArticleData article, List<ArticleData> allArticles) {
         StringBuilder prompt = new StringBuilder();
-        
-        prompt.append("请分析以下电商内容的表现，并给出具体的优化建议：\n\n");
-        
-        prompt.append("【文章信息】\n");
+
+        prompt.append("你是一位专业的电商内容运营专家，擅长分析得物、小红书等平台的图文内容表现。");
+        prompt.append("请根据以下文章的完整信息，给出具体、可操作的优化建议。\n\n");
+
+        prompt.append("【文章基本信息】\n");
         prompt.append("标题: ").append(article.getTitle()).append("\n");
         prompt.append("品牌: ").append(article.getBrand()).append("\n");
         prompt.append("内容类型: ").append(article.getContentType()).append("\n");
         prompt.append("发文类型: ").append(article.getPostType()).append("\n");
         prompt.append("素材来源: ").append(article.getMaterialSource()).append("\n");
         prompt.append("款式信息: ").append(article.getStyleInfo()).append("\n\n");
-        
-        prompt.append("【7天数据表现】\n");
-        prompt.append("阅读量: ").append(article.getReadCount7d()).append("\n");
-        prompt.append("互动量: ").append(article.getInteractionCount7d()).append("\n");
-        prompt.append("好物访问: ").append(article.getProductVisit7d()).append("\n");
-        prompt.append("好物想要: ").append(article.getProductWant7d()).append("\n\n");
-        
-        // 计算平均值作为对比
+
+        prompt.append("【数据表现】\n");
+        prompt.append("7天阅读量: ").append(article.getReadCount7d()).append("\n");
+        prompt.append("7天互动量: ").append(article.getInteractionCount7d()).append("\n");
+        prompt.append("7天好物访问: ").append(article.getProductVisit7d()).append("\n");
+        prompt.append("7天好物想要: ").append(article.getProductWant7d()).append("\n");
+
+        if (article.getReadCount7d() != null && article.getReadCount7d() > 0) {
+            double interactionRate = article.getInteractionCount7d() != null ?
+                (double) article.getInteractionCount7d() / article.getReadCount7d() * 100 : 0;
+            double conversionRate = article.getProductVisit7d() != null ?
+                (double) article.getProductVisit7d() / article.getReadCount7d() * 100 : 0;
+            prompt.append(String.format("互动率: %.2f%%\n", interactionRate));
+            prompt.append(String.format("转化率: %.2f%%\n", conversionRate));
+        }
+        prompt.append("\n");
+
         double avgRead = allArticles.stream()
             .filter(a -> a.getReadCount7d() != null)
             .mapToLong(ArticleData::getReadCount7d)
@@ -175,31 +185,35 @@ public class AIApiService {
             .filter(a -> a.getInteractionCount7d() != null)
             .mapToLong(ArticleData::getInteractionCount7d)
             .average().orElse(0);
-        
-        prompt.append("【平台平均数据】\n");
+
+        prompt.append("【平台对比】\n");
         prompt.append("平均阅读量: ").append(String.format("%.0f", avgRead)).append("\n");
-        prompt.append("平均互动量: ").append(String.format("%.0f", avgInteraction)).append("\n\n");
-        
-        prompt.append("【异常状态】\n");
-        prompt.append("状态: ").append(article.getAnomalyStatus()).append("\n");
-        prompt.append("评分: ").append(article.getAnomalyScore()).append("\n\n");
-        
+        prompt.append("平均互动量: ").append(String.format("%.0f", avgInteraction)).append("\n");
+        prompt.append("异常状态: ").append(article.getAnomalyStatus()).append("\n\n");
+
         if (article.getContent() != null && !article.getContent().isEmpty()) {
-            String contentPreview = article.getContent().length() > 500 
-                ? article.getContent().substring(0, 500) + "..."
+            prompt.append("【文章内容】\n");
+            String contentPreview = article.getContent().length() > 800
+                ? article.getContent().substring(0, 800) + "..."
                 : article.getContent();
-            prompt.append("【内容预览】\n").append(contentPreview).append("\n\n");
+            prompt.append(contentPreview).append("\n\n");
         }
-        
-        prompt.append("请从以下几个方面给出分析和建议：\n");
-        prompt.append("1. 标题优化建议（具体的标题改进方案）\n");
-        prompt.append("2. 内容结构优化（如何改进图文结构）\n");
-        prompt.append("3. 发布时间建议（最佳发布时段）\n");
-        prompt.append("4. 互动率提升策略（如何增加用户互动）\n");
-        prompt.append("5. 转化率优化（如何提高好物访问和想要）\n");
-        prompt.append("6. 针对该品牌/品类的特定建议\n\n");
+
+        if (article.getImagesInfo() != null && !article.getImagesInfo().isEmpty()) {
+            prompt.append("【图片信息】\n");
+            prompt.append("已下载图片: ").append(article.getImagesDownloaded() ? "是" : "否").append("\n\n");
+        }
+
+        prompt.append("请给出以下方面的具体建议：\n");
+        prompt.append("1. 标题优化（给出3个具体改进方案）\n");
+        prompt.append("2. 图片优化（首图、数量、排版）\n");
+        prompt.append("3. 内容结构优化\n");
+        prompt.append("4. 发布时间建议\n");
+        prompt.append("5. 互动率提升策略\n");
+        prompt.append("6. 转化率优化\n");
+        prompt.append("7. 针对").append(article.getBrand()).append("品牌和").append(article.getPostType()).append("类型的专门建议\n\n");
         prompt.append("请用清晰的结构化格式回答，每个建议都要具体可操作。");
-        
+
         return prompt.toString();
     }
     
