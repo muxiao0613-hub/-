@@ -38,8 +38,8 @@ public class ConfigController {
         status.put("timeoutSeconds", aiConfig.getTimeoutSeconds());
         status.put("chatEnabled", aiConfig.isChatEnabled());
         
-        // 调试信息
-        status.put("rawKey", aiConfig.getKey()); // 临时调试用，生产环境应该移除
+        // 显示实际的密钥值用于调试
+        status.put("actualKey", aiConfig.getKey());
         
         return status;
     }
