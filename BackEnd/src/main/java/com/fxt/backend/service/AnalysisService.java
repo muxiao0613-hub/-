@@ -41,11 +41,12 @@ public class AnalysisService {
         articles = articleDataRepository.saveAll(articles);
         
         // 异步执行异常检测，不阻塞用户响应
+        List<ArticleData> finalArticles = articles;
         CompletableFuture.runAsync(() -> {
             try {
-                System.out.println("开始后台异常检测分析，共 " + articles.size() + " 篇文章");
-                anomalyDetectionService.detectAnomalies(articles);
-                articleDataRepository.saveAll(articles);
+                System.out.println("开始后台异常检测分析，共 " + finalArticles.size() + " 篇文章");
+                anomalyDetectionService.detectAnomalies(finalArticles);
+                articleDataRepository.saveAll(finalArticles);
                 System.out.println("后台异常检测分析完成");
             } catch (Exception e) {
                 System.err.println("后台异常检测失败: " + e.getMessage());
