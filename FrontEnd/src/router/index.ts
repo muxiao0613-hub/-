@@ -3,6 +3,7 @@ import Upload from '../views/Upload.vue'
 import Dashboard from '../views/Dashboard.vue'
 import Anomaly from '../views/Anomaly.vue'
 import ArticleDetail from '../views/ArticleDetail.vue'
+import AIChat from '../views/AIChat.vue'
 
 const routes = [
   {
@@ -24,6 +25,11 @@ const routes = [
     path: '/article/:id',
     name: 'ArticleDetail',
     component: ArticleDetail
+  },
+  {
+    path: '/ai-chat',
+    name: 'AIChat',
+    component: AIChat
   }
 ]
 

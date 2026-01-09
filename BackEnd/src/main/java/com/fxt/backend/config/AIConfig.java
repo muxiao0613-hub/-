@@ -8,21 +8,25 @@ import org.springframework.context.annotation.Configuration;
 public class AIConfig {
     
     private boolean enabled = false;
+    private String provider = "openai";
     private String key = "";
     private String url = "https://api.openai.com/v1/chat/completions";
-    private String model = "gpt-3.5-turbo";
+    private String model = "gpt-4o-mini";
     private int maxTokens = 2000;
     private double temperature = 0.7;
     private int timeoutSeconds = 60;
     
-    // 支持 Claude API
-    private String provider = "openai"; // openai 或 claude
-    private String claudeUrl = "https://api.anthropic.com/v1/messages";
-    private String claudeModel = "claude-3-sonnet-20240229";
+    // AI聊天配置
+    private boolean chatEnabled = true;
+    private int maxHistory = 20;
+    private String systemPrompt = "你是一位专业的社交媒体运营分析师，精通得物和小红书平台的内容运营策略。请用中文回答所有问题。";
     
     // Getters and Setters
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
+    
+    public String getProvider() { return provider; }
+    public void setProvider(String provider) { this.provider = provider; }
     
     public String getKey() { return key; }
     public void setKey(String key) { this.key = key; }
@@ -42,12 +46,21 @@ public class AIConfig {
     public int getTimeoutSeconds() { return timeoutSeconds; }
     public void setTimeoutSeconds(int timeoutSeconds) { this.timeoutSeconds = timeoutSeconds; }
     
-    public String getProvider() { return provider; }
-    public void setProvider(String provider) { this.provider = provider; }
+    public boolean isChatEnabled() { return chatEnabled; }
+    public void setChatEnabled(boolean chatEnabled) { this.chatEnabled = chatEnabled; }
     
-    public String getClaudeUrl() { return claudeUrl; }
-    public void setClaudeUrl(String claudeUrl) { this.claudeUrl = claudeUrl; }
+    public int getMaxHistory() { return maxHistory; }
+    public void setMaxHistory(int maxHistory) { this.maxHistory = maxHistory; }
     
-    public String getClaudeModel() { return claudeModel; }
-    public void setClaudeModel(String claudeModel) { this.claudeModel = claudeModel; }
+    public String getSystemPrompt() { return systemPrompt; }
+    public void setSystemPrompt(String systemPrompt) { this.systemPrompt = systemPrompt; }
+    
+    /**
+     * 检查是否有有效的API密钥
+     */
+    public boolean hasValidKey() {
+        return key != null && !key.trim().isEmpty() && 
+               !key.equals("sk-your-openai-api-key-here") &&
+               key.startsWith("sk-");
+    }
 }

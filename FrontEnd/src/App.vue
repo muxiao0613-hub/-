@@ -8,6 +8,7 @@
             <router-link to="/" class="nav-link">数据上传</router-link>
             <router-link to="/dashboard" class="nav-link">数据分析</router-link>
             <router-link to="/anomaly" class="nav-link">异常检测</router-link>
+            <router-link to="/ai-chat" class="nav-link">🤖 AI助手</router-link>
           </nav>
         </div>
       </el-header>

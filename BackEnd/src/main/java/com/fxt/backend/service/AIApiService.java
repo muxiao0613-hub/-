@@ -41,8 +41,7 @@ public class AIApiService {
     public boolean isAvailable() {
         return aiConfig != null &&
                 aiConfig.isEnabled() &&
-                aiConfig.getKey() != null &&
-                !aiConfig.getKey().isEmpty();
+                aiConfig.hasValidKey();
     }
 
     /**
@@ -55,12 +54,7 @@ public class AIApiService {
 
         try {
             String prompt = buildAnalysisPrompt(article, allArticles);
-
-            if ("claude".equalsIgnoreCase(aiConfig.getProvider())) {
-                return callClaudeApi(prompt);
-            } else {
-                return callOpenAIApi(prompt);
-            }
+            return callOpenAIApi(prompt);
         } catch (Exception e) {
             logger.error("AI API 调用失败: {}", e.getMessage());
             return generateLocalAnalysis(article, allArticles);
@@ -79,7 +73,7 @@ public class AIApiService {
         ArrayNode messages = objectMapper.createArrayNode();
         ObjectNode systemMessage = objectMapper.createObjectNode();
         systemMessage.put("role", "system");
-        systemMessage.put("content", "你是一位专业的电商内容分析专家，擅长分析小红书、得物等平台的内容表现。请用中文回答。");
+        systemMessage.put("content", aiConfig.getSystemPrompt());
         messages.add(systemMessage);
 
         ObjectNode userMessage = objectMapper.createObjectNode();
@@ -109,43 +103,6 @@ public class AIApiService {
     }
 
     /**
-     * 调用 Claude API
-     */
-    private String callClaudeApi(String prompt) throws Exception {
-        ObjectNode requestBody = objectMapper.createObjectNode();
-        requestBody.put("model", aiConfig.getClaudeModel());
-        requestBody.put("max_tokens", aiConfig.getMaxTokens());
-
-        ArrayNode messages = objectMapper.createArrayNode();
-        ObjectNode userMessage = objectMapper.createObjectNode();
-        userMessage.put("role", "user");
-        userMessage.put("content", prompt);
-        messages.add(userMessage);
-
-        requestBody.set("messages", messages);
-        requestBody.put("system", "你是一位专业的电商内容分析专家，擅长分析小红书、得物等平台的内容表现。请用中文回答。");
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(aiConfig.getClaudeUrl()))
-                .header("Content-Type", "application/json")
-                .header("x-api-key", aiConfig.getKey())
-                .header("anthropic-version", "2023-06-01")
-                .timeout(Duration.ofSeconds(aiConfig.getTimeoutSeconds()))
-                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
-                .build();
-
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-        if (response.statusCode() != 200) {
-            logger.error("Claude API 错误: {} - {}", response.statusCode(), response.body());
-            throw new RuntimeException("API 调用失败: " + response.statusCode());
-        }
-
-        JsonNode responseJson = objectMapper.readTree(response.body());
-        return responseJson.path("content").path(0).path("text").asText();
-    }
-
-    /**
      * 构建分析提示词
      */
     private String buildAnalysisPrompt(ArticleData article, List<ArticleData> allArticles) {
@@ -155,7 +112,8 @@ public class AIApiService {
         prompt.append("【基本信息】\n");
         prompt.append("标题: ").append(article.getTitle()).append("\n");
         prompt.append("品牌: ").append(article.getBrand()).append("\n");
-        prompt.append("内容类型: ").append(article.getContentType()).append("\n\n");
+        prompt.append("内容类型: ").append(article.getContentType()).append("\n");
+        prompt.append("素材来源: ").append(article.getMaterialSource()).append("\n\n");
 
         prompt.append("【核心数据】\n");
         prompt.append("7天阅读量: ").append(article.getReadCount7d()).append("\n");
@@ -187,7 +145,7 @@ public class AIApiService {
         prompt.append("4. 最佳发布时间建议\n");
         prompt.append("5. 互动率提升具体钩子（Hook）设置\n");
         prompt.append("6. 转化率优化（如何引导用户点击好物链接）\n");
-        prompt.append("7. 针对 ").append(article.getBrand()).append(" 品牌和 ").append(article.getContentType()).append(" 类型的定制化建议。\n\n");
+        prompt.append("7. 针对 ").append(article.getBrand()).append(" 品牌和 ").append(article.getMaterialSource()).append(" 平台的定制化建议。\n\n");
         prompt.append("请使用清晰的 Markdown 结构输出回复。");
 
         return prompt.toString();
@@ -210,8 +168,19 @@ public class AIApiService {
             else analysis.append("✅ 标题长度合适。\n");
         }
 
-        // 2. 数据逻辑
-        analysis.append("\n【2. 数据表现】\n");
+        // 2. 平台识别
+        analysis.append("\n【2. 平台分析】\n");
+        String source = article.getMaterialSource();
+        if (source != null) {
+            if (source.contains("得物") || source.contains("新媒体图文")) {
+                analysis.append("📱 得物平台：建议重点关注产品展示和上脚效果\n");
+            } else if (source.contains("小红书")) {
+                analysis.append("📝 小红书平台：建议重点关注种草内容和生活场景\n");
+            }
+        }
+
+        // 3. 数据逻辑
+        analysis.append("\n【3. 数据表现】\n");
         long readCount = article.getReadCount7d() != null ? article.getReadCount7d() : 0;
         long interactionCount = article.getInteractionCount7d() != null ? article.getInteractionCount7d() : 0;
         double interactionRate = readCount > 0 ? (double) interactionCount / readCount * 100 : 0;
@@ -219,13 +188,15 @@ public class AIApiService {
         analysis.append(String.format("当前互动率: %.2f%%\n", interactionRate));
         if (interactionRate < 2.0) analysis.append("💡 建议：在正文末尾增加提问，引导用户评论互动。\n");
 
-        // 3. 状态建议
-        analysis.append("\n【3. 行动建议】\n");
+        // 4. 状态建议
+        analysis.append("\n【4. 行动建议】\n");
         if ("BAD_ANOMALY".equals(article.getAnomalyStatus())) {
             analysis.append("🚩 内容表现异常偏低：建议检查是否有敏感词，或首图是否不够吸引人。\n");
         } else {
             analysis.append("✨ 表现稳定：建议保持当前发布频率，持续观察。\n");
         }
+
+        analysis.append("\n💡 提示：配置OpenAI API密钥可获得更详细的AI分析建议。");
 
         return analysis.toString();
     }

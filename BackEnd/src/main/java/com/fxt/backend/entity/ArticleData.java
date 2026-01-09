@@ -34,6 +34,9 @@ public class ArticleData {
     @Column(name = "material_source")
     private String materialSource;
     
+    @Column(name = "platform")
+    private String platform; // 智能识别的平台：得物、小红书、未知平台
+    
     @Column(name = "style_info")
     private String styleInfo;
     
@@ -139,6 +142,9 @@ public class ArticleData {
 
     public String getMaterialSource() { return materialSource; }
     public void setMaterialSource(String materialSource) { this.materialSource = materialSource; }
+
+    public String getPlatform() { return platform; }
+    public void setPlatform(String platform) { this.platform = platform; }
 
     public String getStyleInfo() { return styleInfo; }
     public void setStyleInfo(String styleInfo) { this.styleInfo = styleInfo; }
