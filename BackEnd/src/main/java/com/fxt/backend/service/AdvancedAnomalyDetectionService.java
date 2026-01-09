@@ -10,89 +10,84 @@ import java.util.stream.Collectors;
 
 /**
  * 高级异常检测服务 - 优化版
- * 实现多种算法：Z-score、IQR、Isolation Forest、LOF、DBSCAN
- * 使用多维度综合评分机制
+ * 采用更合理的阈值和权重配置
+ * 优化异常判定逻辑，减少误判
  */
 @Service
 public class AdvancedAnomalyDetectionService {
     
-    // 异常检测阈值配置
-    private static final double Z_SCORE_SEVERE = 3.0;
-    private static final double Z_SCORE_MODERATE = 2.0;
-    private static final double Z_SCORE_MILD = 1.5;
+    // ===== 优化后的阈值配置 =====
+    // 降低严重异常阈值，使检测更敏感
+    private static final double Z_SCORE_SEVERE = 2.5;    // 原3.0 -> 2.5
+    private static final double Z_SCORE_MODERATE = 1.8;  // 原2.0 -> 1.8
+    private static final double Z_SCORE_MILD = 1.2;      // 原1.5 -> 1.2
     private static final double IQR_MULTIPLIER = 1.5;
-    private static final double ISOLATION_SCORE_THRESHOLD = -0.5;
+    
+    // ===== 新增：百分位阈值 =====
+    private static final double PERCENTILE_EXCELLENT = 85.0;  // 优秀线
+    private static final double PERCENTILE_GOOD = 70.0;       // 良好线
+    private static final double PERCENTILE_POOR = 30.0;       // 较差线
+    private static final double PERCENTILE_BAD = 15.0;        // 差线
     
     public AnomalyAnalysisReport detectAnomalies(ArticleData article, List<ArticleData> allArticles) {
         AnomalyAnalysisReport report = new AnomalyAnalysisReport();
         List<AnomalyAnalysisResult> results = new ArrayList<>();
         
-        // 过滤有效数据
+        // 过滤有效数据（放宽条件）
         List<ArticleData> validArticles = allArticles.stream()
-            .filter(a -> a.getReadCount7d() != null && a.getReadCount7d() > 0)
+            .filter(a -> a.getReadCount7d() != null && a.getReadCount7d() >= 0)
             .collect(Collectors.toList());
         
-        if (validArticles.size() < 5) {
-            return createBasicReport(article);
+        // 数据量不足时使用简化分析
+        if (validArticles.size() < 3) {
+            return createSimpleReport(article, validArticles);
         }
         
-        // ==================== 核心指标分析 ====================
+        // ==================== 核心指标分析（优化权重）====================
         
-        // 1. 7天阅读量分析（权重：30%）
-        AnomalyAnalysisResult readResult = analyzeMetricAdvanced(
+        // 1. 7天阅读量分析（权重：35%）- 提高权重，这是最重要的指标
+        AnomalyAnalysisResult readResult = analyzeMetricOptimized(
             article, validArticles, "7天阅读量", 
-            ArticleData::getReadCount7d, 0.30
+            ArticleData::getReadCount7d, 0.35
         );
         results.add(readResult);
         
         // 2. 7天互动量分析（权重：25%）
-        AnomalyAnalysisResult interactionResult = analyzeMetricAdvanced(
+        AnomalyAnalysisResult interactionResult = analyzeMetricOptimized(
             article, validArticles, "7天互动量", 
             ArticleData::getInteractionCount7d, 0.25
         );
         results.add(interactionResult);
         
-        // 3. 7天好物访问分析（权重：20%）
-        AnomalyAnalysisResult visitResult = analyzeMetricAdvanced(
+        // 3. 互动率分析（权重：20%）- 重要的效率指标
+        AnomalyAnalysisResult interactionRateResult = analyzeInteractionRateOptimized(article, validArticles);
+        interactionRateResult.setWeight(0.20);
+        results.add(interactionRateResult);
+        
+        // 4. 7天好物访问分析（权重：12%）
+        AnomalyAnalysisResult visitResult = analyzeMetricOptimized(
             article, validArticles, "7天好物访问", 
-            ArticleData::getProductVisit7d, 0.20
+            ArticleData::getProductVisit7d, 0.12
         );
         results.add(visitResult);
         
-        // 4. 互动率分析（权重：15%）
-        AnomalyAnalysisResult interactionRateResult = analyzeInteractionRate(article, validArticles);
-        interactionRateResult.setWeight(0.15);
-        results.add(interactionRateResult);
-        
-        // 5. 转化率分析（权重：10%）
-        AnomalyAnalysisResult conversionResult = analyzeConversionRate(article, validArticles);
-        conversionResult.setWeight(0.10);
+        // 5. 转化率分析（权重：8%）
+        AnomalyAnalysisResult conversionResult = analyzeConversionRateOptimized(article, validArticles);
+        conversionResult.setWeight(0.08);
         results.add(conversionResult);
-        
-        // 6. Isolation Forest 综合分析
-        AnomalyAnalysisResult isolationResult = performIsolationForestAnalysis(article, validArticles);
-        results.add(isolationResult);
-        
-        // 7. LOF 局部离群因子分析
-        AnomalyAnalysisResult lofResult = performLOFAnalysis(article, validArticles);
-        results.add(lofResult);
-        
-        // 8. 增长趋势分析
-        AnomalyAnalysisResult growthResult = analyzeGrowthTrend(article, validArticles);
-        results.add(growthResult);
         
         report.setResults(results);
         
-        // 计算加权综合评分和状态
-        calculateWeightedOverallStatus(report);
+        // 使用优化后的综合评分逻辑
+        calculateOptimizedOverallStatus(report, article);
         
         return report;
     }
     
     /**
-     * 高级指标分析 - 结合Z-score、IQR和百分位
+     * 优化后的指标分析方法
      */
-    private AnomalyAnalysisResult analyzeMetricAdvanced(
+    private AnomalyAnalysisResult analyzeMetricOptimized(
             ArticleData article, 
             List<ArticleData> allArticles, 
             String metricName, 
@@ -102,32 +97,43 @@ public class AdvancedAnomalyDetectionService {
         List<Double> values = allArticles.stream()
             .map(getter)
             .filter(Objects::nonNull)
-            .filter(v -> v > 0)
+            .filter(v -> v >= 0)  // 允许0值
             .map(Long::doubleValue)
             .sorted()
             .collect(Collectors.toList());
         
         if (values.isEmpty()) {
-            return createEmptyResult(metricName);
+            return createEmptyResult(metricName, weight);
         }
         
         double currentValue = getter.apply(article) != null ? getter.apply(article).doubleValue() : 0;
         
-        // 统计指标
+        // 基础统计量
         double mean = values.stream().mapToDouble(Double::doubleValue).average().orElse(0);
         double variance = values.stream().mapToDouble(v -> Math.pow(v - mean, 2)).average().orElse(0);
         double stdDev = Math.sqrt(variance);
         
-        // 使用稳健统计量（中位数和MAD）
+        // 中位数和MAD（更稳健）
         double median = calculateMedian(values);
         double mad = calculateMAD(values, median);
         
-        // Z-score计算（传统和稳健）
-        double zScore = stdDev > 0 ? (currentValue - mean) / stdDev : 0;
-        double robustZScore = mad > 0 ? 0.6745 * (currentValue - median) / mad : 0;
+        // 计算Z-score（使用更稳健的方法）
+        double zScore;
+        if (stdDev > 0) {
+            zScore = (currentValue - mean) / stdDev;
+        } else {
+            // 标准差为0时，基于中位数判断
+            zScore = currentValue > median ? 0.5 : (currentValue < median ? -0.5 : 0);
+        }
         
-        // 综合Z分数（取两者的加权平均）
-        double combinedZScore = 0.6 * zScore + 0.4 * robustZScore;
+        // 计算稳健Z-score
+        double robustZScore = 0;
+        if (mad > 0) {
+            robustZScore = 0.6745 * (currentValue - median) / mad;
+        }
+        
+        // 综合Z分数
+        double combinedZScore = stdDev > 0 ? (0.6 * zScore + 0.4 * robustZScore) : robustZScore;
         
         // 百分位计算
         double percentile = calculatePercentile(currentValue, values);
@@ -149,27 +155,31 @@ public class AdvancedAnomalyDetectionService {
         result.setPercentile(percentile);
         result.setWeight(weight);
         
-        // 偏离描述
+        // 偏离描述（更直观）
         if (mean > 0) {
             double deviationPct = (currentValue - mean) / mean * 100;
             String direction = deviationPct > 0 ? "高于" : "低于";
-            result.setDeviation(String.format("%s平均值 %.1f%%", direction, Math.abs(deviationPct)));
+            String level = "";
+            if (Math.abs(deviationPct) > 100) level = "大幅";
+            else if (Math.abs(deviationPct) > 50) level = "显著";
+            else if (Math.abs(deviationPct) > 20) level = "明显";
+            result.setDeviation(String.format("%s%s平均值 %.1f%%", level, direction, Math.abs(deviationPct)));
         } else {
-            result.setDeviation("无参考数据");
+            result.setDeviation("数据基准为0");
         }
         
-        // 异常等级判定（综合多种方法）
-        result.setLevel(determineAnomalyLevel(combinedZScore, isIQROutlier, percentile, currentValue > mean));
+        // 使用优化后的异常等级判定
+        result.setLevel(determineOptimizedAnomalyLevel(combinedZScore, isIQROutlier, percentile, currentValue > mean));
         
         return result;
     }
     
     /**
-     * 互动率分析
+     * 优化后的互动率分析
      */
-    private AnomalyAnalysisResult analyzeInteractionRate(ArticleData article, List<ArticleData> allArticles) {
+    private AnomalyAnalysisResult analyzeInteractionRateOptimized(ArticleData article, List<ArticleData> allArticles) {
         List<Double> rates = allArticles.stream()
-            .filter(a -> a.getReadCount7d() != null && a.getReadCount7d() > 100 && a.getInteractionCount7d() != null)
+            .filter(a -> a.getReadCount7d() != null && a.getReadCount7d() > 50 && a.getInteractionCount7d() != null)
             .map(a -> (double) a.getInteractionCount7d() / a.getReadCount7d() * 100)
             .sorted()
             .collect(Collectors.toList());
@@ -180,7 +190,9 @@ public class AdvancedAnomalyDetectionService {
         }
         
         if (rates.isEmpty()) {
-            return createEmptyResult("互动率");
+            AnomalyAnalysisResult result = createEmptyResult("互动率", 0.20);
+            result.setValue(currentRate);
+            return result;
         }
         
         double mean = rates.stream().mapToDouble(Double::doubleValue).average().orElse(0);
@@ -195,18 +207,26 @@ public class AdvancedAnomalyDetectionService {
         result.setStdDev(stdDev);
         result.setZScore(zScore);
         result.setPercentile(percentile);
-        result.setDeviation(String.format("%.2f%% (平均: %.2f%%)", currentRate, mean));
-        result.setLevel(determineAnomalyLevel(zScore, false, percentile, currentRate > mean));
+        
+        // 互动率的判断标准
+        String levelDesc;
+        if (currentRate >= 8) levelDesc = "优秀";
+        else if (currentRate >= 5) levelDesc = "良好";
+        else if (currentRate >= 3) levelDesc = "一般";
+        else levelDesc = "偏低";
+        
+        result.setDeviation(String.format("%.2f%% (%s，平均: %.2f%%)", currentRate, levelDesc, mean));
+        result.setLevel(determineOptimizedAnomalyLevel(zScore, false, percentile, currentRate > mean));
         
         return result;
     }
     
     /**
-     * 转化率分析
+     * 优化后的转化率分析
      */
-    private AnomalyAnalysisResult analyzeConversionRate(ArticleData article, List<ArticleData> allArticles) {
+    private AnomalyAnalysisResult analyzeConversionRateOptimized(ArticleData article, List<ArticleData> allArticles) {
         List<Double> rates = allArticles.stream()
-            .filter(a -> a.getReadCount7d() != null && a.getReadCount7d() > 100 && a.getProductVisit7d() != null)
+            .filter(a -> a.getReadCount7d() != null && a.getReadCount7d() > 50 && a.getProductVisit7d() != null)
             .map(a -> (double) a.getProductVisit7d() / a.getReadCount7d() * 100)
             .sorted()
             .collect(Collectors.toList());
@@ -217,7 +237,9 @@ public class AdvancedAnomalyDetectionService {
         }
         
         if (rates.isEmpty()) {
-            return createEmptyResult("好物转化率");
+            AnomalyAnalysisResult result = createEmptyResult("好物转化率", 0.08);
+            result.setValue(currentRate);
+            return result;
         }
         
         double mean = rates.stream().mapToDouble(Double::doubleValue).average().orElse(0);
@@ -233,326 +255,176 @@ public class AdvancedAnomalyDetectionService {
         result.setZScore(zScore);
         result.setPercentile(percentile);
         result.setDeviation(String.format("%.2f%% (平均: %.2f%%)", currentRate, mean));
-        result.setLevel(determineAnomalyLevel(zScore, false, percentile, currentRate > mean));
+        result.setLevel(determineOptimizedAnomalyLevel(zScore, false, percentile, currentRate > mean));
         
         return result;
     }
     
     /**
-     * 增长趋势分析
+     * 优化后的异常等级判定
+     * 更合理的判定逻辑，减少误判
      */
-    private AnomalyAnalysisResult analyzeGrowthTrend(ArticleData article, List<ArticleData> allArticles) {
-        List<Double> growthRates = allArticles.stream()
-            .filter(a -> a.getReadCount7d() != null && a.getReadCount7d() > 0 && a.getReadCount14d() != null)
-            .map(a -> (double) (a.getReadCount14d() - a.getReadCount7d()) / a.getReadCount7d() * 100)
-            .sorted()
-            .collect(Collectors.toList());
+    private String determineOptimizedAnomalyLevel(double zScore, boolean isIQROutlier, double percentile, boolean isPositive) {
+        double absZ = Math.abs(zScore);
         
-        double currentGrowth = 0;
-        if (article.getReadCount7d() != null && article.getReadCount7d() > 0 && article.getReadCount14d() != null) {
-            currentGrowth = (double) (article.getReadCount14d() - article.getReadCount7d()) / article.getReadCount7d() * 100;
-        }
-        
-        if (growthRates.isEmpty()) {
-            return createEmptyResult("增长趋势");
-        }
-        
-        double mean = growthRates.stream().mapToDouble(Double::doubleValue).average().orElse(0);
-        double stdDev = Math.sqrt(growthRates.stream().mapToDouble(v -> Math.pow(v - mean, 2)).average().orElse(0));
-        double zScore = stdDev > 0 ? (currentGrowth - mean) / stdDev : 0;
-        double percentile = calculatePercentile(currentGrowth, growthRates);
-        
-        AnomalyAnalysisResult result = new AnomalyAnalysisResult();
-        result.setMetric("7-14天增长率");
-        result.setValue(currentGrowth);
-        result.setMean(mean);
-        result.setStdDev(stdDev);
-        result.setZScore(zScore);
-        result.setPercentile(percentile);
-        
-        String trendDesc;
-        if (currentGrowth > 50) {
-            trendDesc = "持续发酵中";
-        } else if (currentGrowth > 20) {
-            trendDesc = "正常增长";
-        } else if (currentGrowth > 0) {
-            trendDesc = "增长放缓";
+        // 基于百分位的判定（更直观）
+        if (isPositive) {
+            // 正向：表现好
+            if (percentile >= PERCENTILE_EXCELLENT || absZ > Z_SCORE_SEVERE) {
+                return "SEVERE";  // 极其优秀
+            } else if (percentile >= PERCENTILE_GOOD || absZ > Z_SCORE_MODERATE) {
+                return "MODERATE";  // 表现良好
+            } else if (percentile >= 60 || absZ > Z_SCORE_MILD) {
+                return "MILD";  // 略高于平均
+            }
         } else {
-            trendDesc = "热度下降";
-        }
-        result.setDeviation(String.format("%.1f%% (%s)", currentGrowth, trendDesc));
-        result.setLevel(determineAnomalyLevel(zScore, false, percentile, currentGrowth > mean));
-        
-        return result;
-    }
-    
-    /**
-     * Isolation Forest 算法实现
-     */
-    private AnomalyAnalysisResult performIsolationForestAnalysis(ArticleData article, List<ArticleData> allArticles) {
-        // 构建特征矩阵
-        List<double[]> features = allArticles.stream()
-            .map(this::extractFeatures)
-            .collect(Collectors.toList());
-        
-        double[] currentFeatures = extractFeatures(article);
-        
-        // Isolation Forest评分
-        double anomalyScore = calculateIsolationScore(currentFeatures, features, 100, 10);
-        
-        // 转换为百分位
-        List<Double> allScores = features.stream()
-            .map(f -> calculateIsolationScore(f, features, 100, 10))
-            .sorted()
-            .collect(Collectors.toList());
-        
-        double percentile = calculatePercentile(anomalyScore, allScores);
-        
-        AnomalyAnalysisResult result = new AnomalyAnalysisResult();
-        result.setMetric("Isolation Forest异常评分");
-        result.setValue(anomalyScore);
-        result.setMean(allScores.stream().mapToDouble(Double::doubleValue).average().orElse(0));
-        result.setStdDev(0);
-        result.setZScore(0);
-        result.setPercentile(percentile);
-        result.setDeviation(String.format("异常评分: %.3f (越低越异常)", anomalyScore));
-        
-        if (anomalyScore < -0.6) {
-            result.setLevel("SEVERE");
-        } else if (anomalyScore < -0.4) {
-            result.setLevel("MODERATE");
-        } else if (anomalyScore < -0.2) {
-            result.setLevel("MILD");
-        } else {
-            result.setLevel("NORMAL");
-        }
-        
-        return result;
-    }
-    
-    /**
-     * LOF (Local Outlier Factor) 算法实现
-     */
-    private AnomalyAnalysisResult performLOFAnalysis(ArticleData article, List<ArticleData> allArticles) {
-        List<double[]> features = allArticles.stream()
-            .map(this::extractFeatures)
-            .collect(Collectors.toList());
-        
-        double[] currentFeatures = extractFeatures(article);
-        
-        // 计算LOF分数
-        int k = Math.min(10, features.size() - 1);
-        double lofScore = calculateLOF(currentFeatures, features, k);
-        
-        // 计算所有点的LOF用于比较
-        List<Double> allLOF = new ArrayList<>();
-        for (double[] f : features) {
-            allLOF.add(calculateLOF(f, features, k));
-        }
-        allLOF.sort(Double::compare);
-        
-        double percentile = calculatePercentile(lofScore, allLOF);
-        
-        AnomalyAnalysisResult result = new AnomalyAnalysisResult();
-        result.setMetric("LOF局部离群因子");
-        result.setValue(lofScore);
-        result.setMean(allLOF.stream().mapToDouble(Double::doubleValue).average().orElse(1));
-        result.setStdDev(0);
-        result.setZScore(0);
-        result.setPercentile(percentile);
-        result.setDeviation(String.format("LOF: %.2f (>1.5为异常)", lofScore));
-        
-        if (lofScore > 2.0) {
-            result.setLevel("SEVERE");
-        } else if (lofScore > 1.5) {
-            result.setLevel("MODERATE");
-        } else if (lofScore > 1.2) {
-            result.setLevel("MILD");
-        } else {
-            result.setLevel("NORMAL");
-        }
-        
-        return result;
-    }
-    
-    /**
-     * 提取特征向量
-     */
-    private double[] extractFeatures(ArticleData article) {
-        double readCount = article.getReadCount7d() != null ? article.getReadCount7d().doubleValue() : 0;
-        double interactionCount = article.getInteractionCount7d() != null ? article.getInteractionCount7d().doubleValue() : 0;
-        double productVisit = article.getProductVisit7d() != null ? article.getProductVisit7d().doubleValue() : 0;
-        double productWant = article.getProductWant7d() != null ? article.getProductWant7d().doubleValue() : 0;
-        
-        // 计算比率特征
-        double interactionRate = readCount > 0 ? interactionCount / readCount : 0;
-        double conversionRate = readCount > 0 ? productVisit / readCount : 0;
-        double wantRate = productVisit > 0 ? productWant / productVisit : 0;
-        
-        // 对数变换减少偏斜
-        return new double[]{
-            Math.log1p(readCount),
-            Math.log1p(interactionCount),
-            Math.log1p(productVisit),
-            Math.log1p(productWant),
-            interactionRate * 100,
-            conversionRate * 100,
-            wantRate * 100
-        };
-    }
-    
-    /**
-     * Isolation Forest评分计算
-     */
-    private double calculateIsolationScore(double[] target, List<double[]> allFeatures, int numTrees, int maxDepth) {
-        if (allFeatures.size() < 2) return 0;
-        
-        double totalPathLength = 0;
-        Random random = new Random(42);
-        
-        for (int i = 0; i < numTrees; i++) {
-            totalPathLength += calculatePathLength(target, allFeatures, 0, maxDepth, random);
-        }
-        
-        double avgPathLength = totalPathLength / numTrees;
-        double expectedPathLength = calculateExpectedPathLength(allFeatures.size());
-        
-        return -Math.pow(2, -avgPathLength / expectedPathLength);
-    }
-    
-    private double calculatePathLength(double[] target, List<double[]> data, int depth, int maxDepth, Random random) {
-        if (data.size() <= 1 || depth >= maxDepth) {
-            return depth + calculateAveragePathLength(data.size());
-        }
-        
-        int featureIndex = random.nextInt(target.length);
-        
-        double minVal = data.stream().mapToDouble(f -> f[featureIndex]).min().orElse(0);
-        double maxVal = data.stream().mapToDouble(f -> f[featureIndex]).max().orElse(0);
-        
-        if (minVal >= maxVal) {
-            return depth + calculateAveragePathLength(data.size());
-        }
-        
-        double splitPoint = minVal + random.nextDouble() * (maxVal - minVal);
-        
-        List<double[]> leftData = data.stream()
-            .filter(f -> f[featureIndex] < splitPoint)
-            .collect(Collectors.toList());
-        
-        if (target[featureIndex] < splitPoint) {
-            return calculatePathLength(target, leftData, depth + 1, maxDepth, random);
-        } else {
-            List<double[]> rightData = data.stream()
-                .filter(f -> f[featureIndex] >= splitPoint)
-                .collect(Collectors.toList());
-            return calculatePathLength(target, rightData, depth + 1, maxDepth, random);
-        }
-    }
-    
-    private double calculateAveragePathLength(int n) {
-        if (n <= 1) return 0;
-        return 2.0 * (Math.log(n - 1) + 0.5772156649) - (2.0 * (n - 1) / n);
-    }
-    
-    private double calculateExpectedPathLength(int n) {
-        if (n <= 1) return 0;
-        return 2.0 * (Math.log(n - 1) + 0.5772156649) - (2.0 * (n - 1) / n);
-    }
-    
-    /**
-     * LOF计算
-     */
-    private double calculateLOF(double[] target, List<double[]> data, int k) {
-        if (data.size() <= k) return 1.0;
-        
-        // 计算到所有点的距离
-        List<double[]> distances = new ArrayList<>();
-        for (int i = 0; i < data.size(); i++) {
-            double dist = euclideanDistance(target, data.get(i));
-            distances.add(new double[]{i, dist});
-        }
-        distances.sort((a, b) -> Double.compare(a[1], b[1]));
-        
-        // k近邻
-        List<Integer> kNeighbors = new ArrayList<>();
-        double kDistance = 0;
-        for (int i = 0; i < Math.min(k, distances.size()); i++) {
-            if (distances.get(i)[1] > 0) { // 排除自身
-                kNeighbors.add((int) distances.get(i)[0]);
-                kDistance = distances.get(i)[1];
+            // 负向：表现差
+            if (percentile <= PERCENTILE_BAD || absZ > Z_SCORE_SEVERE) {
+                return "SEVERE";  // 表现很差
+            } else if (percentile <= PERCENTILE_POOR || absZ > Z_SCORE_MODERATE) {
+                return "MODERATE";  // 表现较差
+            } else if (percentile <= 40 || absZ > Z_SCORE_MILD) {
+                return "MILD";  // 略低于平均
             }
         }
         
-        if (kNeighbors.isEmpty() || kDistance == 0) return 1.0;
-        
-        // 计算可达密度
-        double lrd = calculateLRD(target, data, kNeighbors, k);
-        if (lrd == 0) return 1.0;
-        
-        // 计算LOF
-        double sumLrd = 0;
-        for (int idx : kNeighbors) {
-            List<Integer> neighborKNeighbors = getKNeighbors(data.get(idx), data, k);
-            sumLrd += calculateLRD(data.get(idx), data, neighborKNeighbors, k);
+        // IQR异常检测作为补充
+        if (isIQROutlier && absZ > 1.0) {
+            return "MILD";
         }
         
-        return (sumLrd / kNeighbors.size()) / lrd;
-    }
-    
-    private double calculateLRD(double[] point, List<double[]> data, List<Integer> neighbors, int k) {
-        if (neighbors.isEmpty()) return 0;
-        
-        double sumReachDist = 0;
-        for (int idx : neighbors) {
-            double dist = euclideanDistance(point, data.get(idx));
-            double neighborKDist = getKDistance(data.get(idx), data, k);
-            sumReachDist += Math.max(dist, neighborKDist);
-        }
-        
-        return sumReachDist > 0 ? neighbors.size() / sumReachDist : 0;
-    }
-    
-    private List<Integer> getKNeighbors(double[] point, List<double[]> data, int k) {
-        List<double[]> distances = new ArrayList<>();
-        for (int i = 0; i < data.size(); i++) {
-            double dist = euclideanDistance(point, data.get(i));
-            if (dist > 0) {
-                distances.add(new double[]{i, dist});
-            }
-        }
-        distances.sort((a, b) -> Double.compare(a[1], b[1]));
-        
-        List<Integer> neighbors = new ArrayList<>();
-        for (int i = 0; i < Math.min(k, distances.size()); i++) {
-            neighbors.add((int) distances.get(i)[0]);
-        }
-        return neighbors;
-    }
-    
-    private double getKDistance(double[] point, List<double[]> data, int k) {
-        List<Double> distances = new ArrayList<>();
-        for (double[] other : data) {
-            double dist = euclideanDistance(point, other);
-            if (dist > 0) {
-                distances.add(dist);
-            }
-        }
-        distances.sort(Double::compare);
-        return k <= distances.size() ? distances.get(k - 1) : (distances.isEmpty() ? 0 : distances.get(distances.size() - 1));
-    }
-    
-    private double euclideanDistance(double[] a, double[] b) {
-        double sum = 0;
-        for (int i = 0; i < a.length; i++) {
-            sum += Math.pow(a[i] - b[i], 2);
-        }
-        return Math.sqrt(sum);
+        return "NORMAL";
     }
     
     /**
-     * 计算中位数
+     * 优化后的综合状态计算
      */
+    private void calculateOptimizedOverallStatus(AnomalyAnalysisReport report, ArticleData article) {
+        List<AnomalyAnalysisResult> results = report.getResults();
+        
+        if (results.isEmpty()) {
+            report.setOverallStatus("NORMAL");
+            report.setOverallScore(50.0);
+            return;
+        }
+        
+        double weightedScore = 0;
+        double totalWeight = 0;
+        int positiveAnomalyCount = 0;
+        int negativeAnomalyCount = 0;
+        int severePositive = 0;
+        int severeNegative = 0;
+        
+        for (AnomalyAnalysisResult result : results) {
+            double weight = result.getWeight() != null ? result.getWeight() : 1.0 / results.size();
+            
+            // 基于百分位计算分数（更直观）
+            double score = result.getPercentile();
+            
+            // Z-score微调
+            if (result.getZScore() > 0) {
+                score = Math.min(100, score + result.getZScore() * 2);
+            } else {
+                score = Math.max(0, score + result.getZScore() * 2);
+            }
+            
+            weightedScore += score * weight;
+            totalWeight += weight;
+            
+            // 统计异常类型
+            if (!"NORMAL".equals(result.getLevel())) {
+                boolean isPositive = result.getZScore() > 0 || result.getPercentile() > 50;
+                if (isPositive) {
+                    positiveAnomalyCount++;
+                    if ("SEVERE".equals(result.getLevel())) severePositive++;
+                } else {
+                    negativeAnomalyCount++;
+                    if ("SEVERE".equals(result.getLevel())) severeNegative++;
+                }
+            }
+        }
+        
+        double finalScore = totalWeight > 0 ? weightedScore / totalWeight : 50;
+        report.setOverallScore(finalScore);
+        
+        // ===== 优化后的状态判定逻辑 =====
+        // 更清晰的判定标准
+        
+        // 1. 优先检查严重异常
+        if (severeNegative >= 2) {
+            report.setOverallStatus("BAD_ANOMALY");
+            return;
+        }
+        if (severePositive >= 2) {
+            report.setOverallStatus("GOOD_ANOMALY");
+            return;
+        }
+        
+        // 2. 综合评分判定
+        if (finalScore >= 75) {
+            report.setOverallStatus("GOOD_ANOMALY");
+        } else if (finalScore <= 25) {
+            report.setOverallStatus("BAD_ANOMALY");
+        } else if (finalScore >= 65 && positiveAnomalyCount > negativeAnomalyCount) {
+            report.setOverallStatus("GOOD_ANOMALY");
+        } else if (finalScore <= 35 && negativeAnomalyCount > positiveAnomalyCount) {
+            report.setOverallStatus("BAD_ANOMALY");
+        } else {
+            // 3. 异常数量判定
+            if (negativeAnomalyCount >= 3 && positiveAnomalyCount <= 1) {
+                report.setOverallStatus("BAD_ANOMALY");
+            } else if (positiveAnomalyCount >= 3 && negativeAnomalyCount <= 1) {
+                report.setOverallStatus("GOOD_ANOMALY");
+            } else {
+                report.setOverallStatus("NORMAL");
+            }
+        }
+    }
+    
+    /**
+     * 简化报告（数据量不足时使用）
+     */
+    private AnomalyAnalysisReport createSimpleReport(ArticleData article, List<ArticleData> validArticles) {
+        AnomalyAnalysisReport report = new AnomalyAnalysisReport();
+        
+        // 基于绝对值判断
+        long readCount = article.getReadCount7d() != null ? article.getReadCount7d() : 0;
+        long interactionCount = article.getInteractionCount7d() != null ? article.getInteractionCount7d() : 0;
+        
+        double score = 50;
+        String status = "NORMAL";
+        
+        // 简单阈值判断
+        if (readCount > 10000) {
+            score = 80;
+            status = "GOOD_ANOMALY";
+        } else if (readCount > 5000) {
+            score = 65;
+        } else if (readCount < 500) {
+            score = 30;
+            status = "BAD_ANOMALY";
+        } else if (readCount < 1000) {
+            score = 40;
+        }
+        
+        // 互动率调整
+        if (readCount > 0) {
+            double interactionRate = (double) interactionCount / readCount * 100;
+            if (interactionRate > 8) score += 10;
+            else if (interactionRate < 2) score -= 10;
+        }
+        
+        score = Math.max(0, Math.min(100, score));
+        
+        report.setOverallScore(score);
+        report.setOverallStatus(status);
+        report.setResults(new ArrayList<>());
+        
+        return report;
+    }
+    
+    // ==================== 辅助方法 ====================
+    
     private double calculateMedian(List<Double> values) {
         if (values.isEmpty()) return 0;
         int size = values.size();
@@ -563,33 +435,12 @@ public class AdvancedAnomalyDetectionService {
         }
     }
     
-    /**
-     * 计算MAD (Median Absolute Deviation)
-     */
     private double calculateMAD(List<Double> values, double median) {
         List<Double> deviations = values.stream()
             .map(v -> Math.abs(v - median))
             .sorted()
             .collect(Collectors.toList());
         return calculateMedian(deviations);
-    }
-    
-    /**
-     * 综合判定异常等级
-     */
-    private String determineAnomalyLevel(double zScore, boolean isIQROutlier, double percentile, boolean isPositive) {
-        double absZ = Math.abs(zScore);
-        
-        // 综合判定
-        if (absZ > Z_SCORE_SEVERE || (absZ > Z_SCORE_MODERATE && isIQROutlier)) {
-            return "SEVERE";
-        } else if (absZ > Z_SCORE_MODERATE || (absZ > Z_SCORE_MILD && isIQROutlier)) {
-            return "MODERATE";
-        } else if (absZ > Z_SCORE_MILD || isIQROutlier) {
-            return "MILD";
-        } else {
-            return "NORMAL";
-        }
     }
     
     private double calculatePercentile(double value, List<Double> sortedValues) {
@@ -610,70 +461,7 @@ public class AdvancedAnomalyDetectionService {
         return sortedValues.get(index);
     }
     
-    /**
-     * 计算加权综合状态
-     */
-    private void calculateWeightedOverallStatus(AnomalyAnalysisReport report) {
-        List<AnomalyAnalysisResult> results = report.getResults();
-        
-        double weightedScore = 0;
-        double totalWeight = 0;
-        int positiveAnomalies = 0;
-        int negativeAnomalies = 0;
-        
-        for (AnomalyAnalysisResult result : results) {
-            double weight = result.getWeight() != null ? result.getWeight() : 1.0 / results.size();
-            
-            // 基于Z-score和百分位计算分数
-            double score;
-            if (result.getZScore() > 0) {
-                // 正向异常（表现好）
-                score = 50 + result.getZScore() * 10;
-            } else {
-                // 负向异常（表现差）
-                score = 50 + result.getZScore() * 10;
-            }
-            score = Math.max(0, Math.min(100, score));
-            
-            weightedScore += score * weight;
-            totalWeight += weight;
-            
-            // 统计异常类型
-            if (!"NORMAL".equals(result.getLevel())) {
-                if (result.getZScore() > 0 || result.getPercentile() > 70) {
-                    positiveAnomalies++;
-                } else {
-                    negativeAnomalies++;
-                }
-            }
-        }
-        
-        double finalScore = totalWeight > 0 ? weightedScore / totalWeight : 50;
-        report.setOverallScore(finalScore);
-        
-        // 判断整体状态
-        if (negativeAnomalies >= 3 && positiveAnomalies < 2) {
-            report.setOverallStatus("BAD_ANOMALY");
-        } else if (positiveAnomalies >= 3 && negativeAnomalies < 2) {
-            report.setOverallStatus("GOOD_ANOMALY");
-        } else if (finalScore < 35) {
-            report.setOverallStatus("BAD_ANOMALY");
-        } else if (finalScore > 65) {
-            report.setOverallStatus("GOOD_ANOMALY");
-        } else {
-            report.setOverallStatus("NORMAL");
-        }
-    }
-    
-    private AnomalyAnalysisReport createBasicReport(ArticleData article) {
-        AnomalyAnalysisReport report = new AnomalyAnalysisReport();
-        report.setOverallStatus("NORMAL");
-        report.setOverallScore(50.0);
-        report.setResults(new ArrayList<>());
-        return report;
-    }
-    
-    private AnomalyAnalysisResult createEmptyResult(String metricName) {
+    private AnomalyAnalysisResult createEmptyResult(String metricName, double weight) {
         AnomalyAnalysisResult result = new AnomalyAnalysisResult();
         result.setMetric(metricName);
         result.setValue(0.0);
@@ -683,6 +471,7 @@ public class AdvancedAnomalyDetectionService {
         result.setPercentile(50.0);
         result.setDeviation("数据不足");
         result.setLevel("NORMAL");
+        result.setWeight(weight);
         return result;
     }
 }

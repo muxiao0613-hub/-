@@ -2,6 +2,7 @@ package com.fxt.backend.service;
 
 import com.fxt.backend.crawler.BaseCrawler;
 import com.fxt.backend.crawler.DewuCrawler;
+import com.fxt.backend.crawler.XiaohongshuCrawler;  // 新增导入
 import com.fxt.backend.enums.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,9 @@ public class CrawlerFactory {
     @Autowired
     private DewuCrawler dewuCrawler;
     
+    @Autowired
+    private XiaohongshuCrawler xiaohongshuCrawler;  // 新增注入
+    
     private final Map<DataSource, BaseCrawler> crawlers = new HashMap<>();
     
     /**
@@ -26,7 +30,7 @@ public class CrawlerFactory {
      */
     public void initializeCrawlers() {
         crawlers.put(DataSource.DEWU, dewuCrawler);
-        // 小红书爬虫已移除
+        crawlers.put(DataSource.XIAOHONGSHU, xiaohongshuCrawler);  // 新增小红书爬虫
     }
     
     /**
@@ -71,7 +75,7 @@ public class CrawlerFactory {
     public Map<DataSource, String> getSupportedPlatforms() {
         Map<DataSource, String> platforms = new HashMap<>();
         platforms.put(DataSource.DEWU, DataSource.DEWU.getDisplayName());
-        // 小红书暂不支持爬取
+        platforms.put(DataSource.XIAOHONGSHU, DataSource.XIAOHONGSHU.getDisplayName());  // 新增
         return platforms;
     }
 }

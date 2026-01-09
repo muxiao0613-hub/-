@@ -93,7 +93,7 @@ public class AIChatService {
             // 获取AI回复
             String aiResponse;
             if (isAIAvailable()) {
-                aiResponse = callOpenAIChat(message, request.getSessionId());
+                aiResponse = callQwenChat(message, request.getSessionId());
             } else {
                 aiResponse = generateLocalResponse(message);
             }
@@ -136,7 +136,7 @@ public class AIChatService {
             
             String aiResponse;
             if (isAIAvailable()) {
-                aiResponse = callOpenAIChat(initialMessage, sessionId);
+                aiResponse = callQwenChat(initialMessage, sessionId);
             } else {
                 aiResponse = generateLocalDataAnalysis();
             }
@@ -170,9 +170,9 @@ public class AIChatService {
     }
     
     /**
-     * 调用OpenAI聊天API
+     * 调用通义千问聊天API
      */
-    private String callOpenAIChat(String message, String sessionId) throws Exception {
+    private String callQwenChat(String message, String sessionId) throws Exception {
         ObjectNode requestBody = objectMapper.createObjectNode();
         requestBody.put("model", aiConfig.getModel());
         requestBody.put("max_tokens", aiConfig.getMaxTokens());
@@ -254,7 +254,7 @@ public class AIChatService {
         return "🤖 本地模式回复：\n\n" +
                "感谢您的提问！目前AI服务未开启，我只能提供基础的建议。\n\n" +
                "建议：\n" +
-               "1. 配置OpenAI API密钥以获得智能分析\n" +
+               "1. 配置通义千问API密钥以获得智能分析\n" +
                "2. 查看数据面板了解详细表现\n" +
                "3. 使用快捷命令：/内容策略、/发布时间、/互动提升等\n\n" +
                "如需详细分析，请开启AI服务。";
@@ -318,7 +318,12 @@ public class AIChatService {
      * 检查AI服务是否可用
      */
     private boolean isAIAvailable() {
-        return aiConfig != null && aiConfig.isEnabled() && aiConfig.hasValidKey();
+        boolean available = aiConfig != null && aiConfig.isEnabled() && aiConfig.hasValidKey();
+        logger.debug("AI聊天服务可用性检查: enabled={}, hasValidKey={}, result={}",
+            aiConfig != null ? aiConfig.isEnabled() : "null",
+            aiConfig != null ? aiConfig.hasValidKey() : "null",
+            available);
+        return available;
     }
     
     /**

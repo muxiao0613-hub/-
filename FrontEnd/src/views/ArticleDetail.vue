@@ -26,16 +26,15 @@
           <template #header>
             <div class="card-header">
               <span>📷 图文内容</span>
-              <!-- 只有得物平台显示爬取状态 -->
+              <!-- 显示爬取状态 -->
               <el-tag 
-                v-if="article?.platform === '得物'"
                 :type="article?.crawlStatus === 'SUCCESS' ? 'success' : 'info'" 
                 size="small"
               >
                 {{ getCrawlStatusText(article?.crawlStatus) }}
               </el-tag>
-              <el-tag v-else type="warning" size="small">
-                小红书暂不支持爬取
+              <el-tag type="info" size="small" style="margin-left: 8px;">
+                {{ article?.platform || '未知平台' }}
               </el-tag>
             </div>
           </template>
@@ -155,7 +154,7 @@
               <span>🤖 AI智能建议</span>
               <div class="header-actions">
                 <el-tag :type="aiAvailable ? 'success' : 'warning'" size="small">
-                  {{ aiAvailable ? 'OpenAI已连接' : '本地模式' }}
+                  {{ aiAvailable ? '通义千问已连接' : '本地模式' }}
                 </el-tag>
               </div>
             </div>
