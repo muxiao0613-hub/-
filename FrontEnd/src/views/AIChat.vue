@@ -101,7 +101,7 @@
 <script>
 import { ref, reactive, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import api from '@/api'
+import api from '../api'
 
 export default {
   name: 'AIChat',

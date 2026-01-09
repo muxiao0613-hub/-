@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: 'http://localhost:8081/api',
   timeout: 300000  // 5分钟超时
 })
 
@@ -64,7 +64,7 @@ export interface ArticleDetailResponse {
 export interface ArticleData {
   id?: number
   dataId: string
-  title: string
+  title: string | null
   brand: string
   publishTime: string
   articleLink: string
@@ -72,6 +72,7 @@ export interface ArticleData {
   postType: string
   materialSource?: string
   styleInfo?: string
+  platform?: string
   readCount7d: number
   readCount14d: number
   interactionCount7d: number
@@ -83,18 +84,26 @@ export interface ArticleData {
   productWant7d?: number
   productWant14d?: number
   anomalyStatus: string
-  anomalyDetails?: string
   anomalyScore?: number
   content?: string
-  titleAnalysis?: string
-  contentAnalysis?: string
   crawlStatus?: string
-  crawlError?: string
   optimizationSuggestions?: string
   aiSuggestions?: string
-  imagesInfo?: string  // JSON格式的图片URL列表
-  createdAt?: string
-  updatedAt?: string
+  imagesInfo?: string
+}
+
+export interface PageResponse<T> {
+  content: T[]
+  totalElements: number
+  totalPages: number
+  currentPage: number
+  pageSize: number
+}
+
+export interface PlatformStats {
+  dewuCount: number
+  xiaohongshuCount: number
+  totalCount: number
 }
 
 export interface Statistics {
@@ -122,6 +131,26 @@ export const analysisApi = {
   // 获取所有文章
   getAllArticles: (): Promise<ArticleData[]> => {
     return api.get('/analysis/articles')
+  },
+
+  // 分页获取文章
+  getArticlesPage: (
+    page: number = 0, 
+    size: number = 20, 
+    platform?: string, 
+    status?: string
+  ): Promise<PageResponse<ArticleData>> => {
+    const params = new URLSearchParams()
+    params.append('page', String(page))
+    params.append('size', String(size))
+    if (platform) params.append('platform', platform)
+    if (status) params.append('status', status)
+    return api.get(`/analysis/articles/page?${params.toString()}`)
+  },
+
+  // 获取平台统计
+  getPlatformStats: (): Promise<PlatformStats> => {
+    return api.get('/analysis/platforms/stats')
   },
 
   // 获取异常文章

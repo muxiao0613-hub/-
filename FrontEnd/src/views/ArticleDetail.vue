@@ -26,8 +26,16 @@
           <template #header>
             <div class="card-header">
               <span>📷 图文内容</span>
-              <el-tag :type="article?.crawlStatus === 'SUCCESS' ? 'success' : 'info'" size="small">
+              <!-- 只有得物平台显示爬取状态 -->
+              <el-tag 
+                v-if="article?.platform === '得物'"
+                :type="article?.crawlStatus === 'SUCCESS' ? 'success' : 'info'" 
+                size="small"
+              >
                 {{ getCrawlStatusText(article?.crawlStatus) }}
+              </el-tag>
+              <el-tag v-else type="warning" size="small">
+                小红书暂不支持爬取
               </el-tag>
             </div>
           </template>

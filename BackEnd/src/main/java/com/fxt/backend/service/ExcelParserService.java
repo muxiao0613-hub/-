@@ -1,6 +1,7 @@
 package com.fxt.backend.service;
 
 import com.fxt.backend.entity.ArticleData;
+import com.fxt.backend.enums.DataSource;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
@@ -21,6 +22,12 @@ public class ExcelParserService {
         try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
             Sheet sheet = workbook.getSheetAt(0);
             
+            // 检测平台类型：通过检查第二列是否为"标题"
+            Row headerRow = sheet.getRow(0);
+            boolean isDewu = headerRow != null &&
+                            getCellValueAsString(headerRow.getCell(1)) != null &&
+                            getCellValueAsString(headerRow.getCell(1)).equals("标题");
+            
             // 跳过标题行
             for (int i = 1; i <= sheet.getLastRowNum(); i++) {
                 Row row = sheet.getRow(i);
@@ -28,55 +35,96 @@ public class ExcelParserService {
                 
                 ArticleData article = new ArticleData();
                 
-                // 解析各列数据 - 根据实际Excel结构
-                article.setDataId(getCellValueAsString(row.getCell(0)));           // data_id
-                article.setTitle(getCellValueAsString(row.getCell(1)));            // 标题
-                article.setBrand(getCellValueAsString(row.getCell(2)));            // 品牌
-                
-                // 解析发文时间
-                String publishTimeStr = getCellValueAsString(row.getCell(3));      // 发文时间
-                if (publishTimeStr != null && !publishTimeStr.isEmpty()) {
-                    try {
-                        article.setPublishTime(parseDateTime(publishTimeStr));
-                    } catch (Exception e) {
-                        // 如果解析失败，设置为当前时间
-                        article.setPublishTime(LocalDateTime.now());
-                    }
+                if (isDewu) {
+                    // 得物格式解析（有标题列）
+                    parseDewuRow(row, article);
+                } else {
+                    // 小红书格式解析（无标题列）
+                    parseXiaohongshuRow(row, article);
                 }
-                
-                article.setArticleLink(getCellValueAsString(row.getCell(4)));      // 发文链接
-                article.setContentType(getCellValueAsString(row.getCell(5)));     // 内容形式
-                article.setPostType(getCellValueAsString(row.getCell(6)));        // 发文类型
-                
-                // 新增字段：素材来源和款式信息
-                String materialSource = getCellValueAsString(row.getCell(7));     // 素材来源
-                String styleInfo = getCellValueAsString(row.getCell(8));          // 款式信息
-                article.setMaterialSource(materialSource);
-                article.setStyleInfo(styleInfo);
-                
-                // 解析数值型数据 - 根据实际列位置
-                article.setReadCount7d(getCellValueAsLong(row.getCell(9)));       // 7天阅读/播放
-                article.setInteractionCount7d(getCellValueAsLong(row.getCell(10))); // 7天互动
-                article.setProductVisit7d(getCellValueAsLong(row.getCell(11)));   // 7天好物访问
-                article.setProductWant7d(getCellValueAsLong(row.getCell(12)));    // 7天好物想要
-                
-                article.setReadCount14d(getCellValueAsLong(row.getCell(13)));     // 14天阅读/播放
-                article.setInteractionCount14d(getCellValueAsLong(row.getCell(14))); // 14天互动
-                article.setProductVisitCount(getCellValueAsLong(row.getCell(15))); // 14天好物访问
-                article.setProductWant14d(getCellValueAsLong(row.getCell(16)));   // 14天好物想要
-                
-                // 设置分享量（使用好物想要作为分享指标）
-                article.setShareCount7d(article.getProductWant7d());
-                article.setShareCount14d(article.getProductWant14d());
                 
                 // 初始状态设为正常
                 article.setAnomalyStatus("NORMAL");
-                
                 articles.add(article);
             }
         }
         
         return articles;
+    }
+                
+    
+    private void parseDewuRow(Row row, ArticleData article) {
+        article.setDataId(getCellValueAsString(row.getCell(0)));
+        article.setTitle(getCellValueAsString(row.getCell(1)));
+        article.setBrand(getCellValueAsString(row.getCell(2)));
+        
+        String publishTimeStr = getCellValueAsString(row.getCell(3));
+        if (publishTimeStr != null && !publishTimeStr.isEmpty()) {
+            try {
+                article.setPublishTime(parseDateTime(publishTimeStr));
+            } catch (Exception e) {
+                article.setPublishTime(LocalDateTime.now());
+            }
+        }
+        
+        article.setArticleLink(getCellValueAsString(row.getCell(4)));
+        article.setContentType(getCellValueAsString(row.getCell(5)));
+        article.setPostType(getCellValueAsString(row.getCell(6)));
+        article.setMaterialSource(getCellValueAsString(row.getCell(7)));
+        article.setStyleInfo(getCellValueAsString(row.getCell(8)));
+        article.setPlatform("得物");
+        
+        // 7天数据
+        article.setReadCount7d(getCellValueAsLong(row.getCell(9)));
+        article.setInteractionCount7d(getCellValueAsLong(row.getCell(10)));
+        article.setProductVisit7d(getCellValueAsLong(row.getCell(11)));
+        article.setProductWant7d(getCellValueAsLong(row.getCell(12)));
+        
+        // 14天数据
+        article.setReadCount14d(getCellValueAsLong(row.getCell(13)));
+        article.setInteractionCount14d(getCellValueAsLong(row.getCell(14)));
+        article.setProductVisitCount(getCellValueAsLong(row.getCell(15)));
+        article.setProductWant14d(getCellValueAsLong(row.getCell(16)));
+        
+        article.setShareCount7d(article.getProductWant7d());
+        article.setShareCount14d(article.getProductWant14d());
+    }
+    
+    private void parseXiaohongshuRow(Row row, ArticleData article) {
+        article.setDataId(getCellValueAsString(row.getCell(0)));
+        article.setTitle(null); // 小红书无标题列
+        article.setBrand(getCellValueAsString(row.getCell(1)));
+        
+        String publishTimeStr = getCellValueAsString(row.getCell(2));
+        if (publishTimeStr != null && !publishTimeStr.isEmpty()) {
+            try {
+                article.setPublishTime(parseDateTime(publishTimeStr));
+            } catch (Exception e) {
+                article.setPublishTime(LocalDateTime.now());
+            }
+        }
+        
+        article.setArticleLink(getCellValueAsString(row.getCell(3)));
+        article.setContentType(getCellValueAsString(row.getCell(4)));
+        article.setPostType(getCellValueAsString(row.getCell(5)));
+        article.setMaterialSource(getCellValueAsString(row.getCell(6)));
+        article.setStyleInfo(getCellValueAsString(row.getCell(7)));
+        article.setPlatform("小红书");
+        
+        // 7天数据
+        article.setReadCount7d(getCellValueAsLong(row.getCell(8)));
+        article.setInteractionCount7d(getCellValueAsLong(row.getCell(9)));
+        article.setProductVisit7d(getCellValueAsLong(row.getCell(10)));
+        article.setProductWant7d(getCellValueAsLong(row.getCell(11)));
+        
+        // 14天数据
+        article.setReadCount14d(getCellValueAsLong(row.getCell(12)));
+        article.setInteractionCount14d(getCellValueAsLong(row.getCell(13)));
+        article.setProductVisitCount(getCellValueAsLong(row.getCell(14)));
+        article.setProductWant14d(getCellValueAsLong(row.getCell(15)));
+        
+        article.setShareCount7d(article.getProductWant7d());
+        article.setShareCount14d(article.getProductWant14d());
     }
     
     private String getCellValueAsString(Cell cell) {
@@ -118,14 +166,11 @@ public class ExcelParserService {
     }
     
     private LocalDateTime parseDateTime(String dateTimeStr) {
-        // 尝试多种日期格式
         String[] patterns = {
             "yyyy-MM-dd HH:mm:ss",
             "yyyy/MM/dd HH:mm:ss",
             "yyyy-MM-dd",
-            "yyyy/MM/dd",
-            "MM/dd/yyyy",
-            "dd/MM/yyyy"
+            "yyyy/MM/dd"
         };
         
         for (String pattern : patterns) {
@@ -134,15 +179,14 @@ public class ExcelParserService {
                 if (pattern.contains("HH:mm:ss")) {
                     return LocalDateTime.parse(dateTimeStr, formatter);
                 } else {
-                    return LocalDateTime.parse(dateTimeStr + " 00:00:00", 
-                        DateTimeFormatter.ofPattern(pattern + " HH:mm:ss"));
+                    return LocalDateTime.parse(dateTimeStr + " 00:00:00",
+                         DateTimeFormatter.ofPattern(pattern + " HH:mm:ss"));
                 }
             } catch (Exception e) {
                 // 继续尝试下一个格式
             }
         }
         
-        // 如果所有格式都失败，返回当前时间
         return LocalDateTime.now();
     }
 }

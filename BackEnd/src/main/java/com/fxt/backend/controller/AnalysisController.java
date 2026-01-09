@@ -11,6 +11,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.ArrayList;
 
 @RestController
 @RequestMapping("/api/analysis")
@@ -120,6 +122,67 @@ public class AnalysisController {
         statistics.put("avgInteractionCount", avgInteractionCount);
         
         return ResponseEntity.ok(statistics);
+    }
+    
+    @GetMapping("/articles/page")
+    public ResponseEntity<Map<String, Object>> getArticlesPage(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String platform,
+            @RequestParam(required = false) String status) {
+        
+        List<ArticleData> allArticles = analysisService.getAllArticles();
+        
+        // 按平台筛选
+        if (platform != null && !platform.isEmpty()) {
+            allArticles = allArticles.stream()
+                .filter(a -> platform.equals(a.getPlatform()))
+                .collect(Collectors.toList());
+        }
+        
+        // 按状态筛选
+        if (status != null && !status.isEmpty()) {
+            allArticles = allArticles.stream()
+                .filter(a -> status.equals(a.getAnomalyStatus()))
+                .collect(Collectors.toList());
+        }
+        
+        int totalElements = allArticles.size();
+        int totalPages = (int) Math.ceil((double) totalElements / size);
+        int start = page * size;
+        int end = Math.min(start + size, totalElements);
+        
+        List<ArticleData> pageContent = start < totalElements 
+            ? allArticles.subList(start, end) 
+            : new ArrayList<>();
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("content", pageContent);
+        response.put("totalElements", totalElements);
+        response.put("totalPages", totalPages);
+        response.put("currentPage", page);
+        response.put("pageSize", size);
+        
+        return ResponseEntity.ok(response);
+    }
+    
+    @GetMapping("/platforms/stats")
+    public ResponseEntity<Map<String, Object>> getPlatformStats() {
+        List<ArticleData> allArticles = analysisService.getAllArticles();
+        
+        long dewuCount = allArticles.stream()
+            .filter(a -> "得物".equals(a.getPlatform()))
+            .count();
+        long xhsCount = allArticles.stream()
+            .filter(a -> "小红书".equals(a.getPlatform()))
+            .count();
+        
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("dewuCount", dewuCount);
+        stats.put("xiaohongshuCount", xhsCount);
+        stats.put("totalCount", allArticles.size());
+        
+        return ResponseEntity.ok(stats);
     }
     
     @DeleteMapping("/articles")
